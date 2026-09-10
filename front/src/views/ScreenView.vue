@@ -16,11 +16,11 @@
       <!-- 左列 -->
       <section class="col">
         <div class="panel">
-          <h3 class="panel-title">▎省分组超标统计</h3>
+          <h3 class="panel-title"><i class="fa-solid fa-flag"></i>省分组超标统计</h3>
           <VChart :option="provinceOption" height="100%" class="chart" />
         </div>
         <div class="panel">
-          <h3 class="panel-title">▎AQI 指数分布统计</h3>
+          <h3 class="panel-title"><i class="fa-solid fa-chart-pie"></i>AQI 指数分布统计</h3>
           <VChart :option="distributionOption" height="100%" class="chart" />
         </div>
       </section>
@@ -50,11 +50,11 @@
           </div>
         </div>
         <div class="panel grow">
-          <h3 class="panel-title">▎近12个月 AQI 超标趋势</h3>
+          <h3 class="panel-title"><i class="fa-solid fa-chart-line"></i>近12个月 AQI 超标趋势</h3>
           <VChart :option="trendOption" height="100%" class="chart" />
         </div>
         <div class="panel">
-          <h3 class="panel-title">▎全国网格覆盖情况</h3>
+          <h3 class="panel-title"><i class="fa-solid fa-map"></i>全国网格覆盖情况</h3>
           <div class="cov-row">
             <div class="cov-block">
               <span class="cov-big">{{ coverage.provinceCovered }}<small>/{{ coverage.provinceTotal }} 省</small></span>
@@ -71,11 +71,11 @@
       <!-- 右列 -->
       <section class="col">
         <div class="panel">
-          <h3 class="panel-title">▎空气质量检测实时统计</h3>
+          <h3 class="panel-title"><i class="fa-solid fa-gauge-high"></i>空气质量检测实时统计</h3>
           <VChart :option="realtimePieOption" height="100%" class="chart" />
         </div>
         <div class="panel">
-          <h3 class="panel-title">▎已覆盖网格区域</h3>
+          <h3 class="panel-title"><i class="fa-solid fa-city"></i>已覆盖网格区域</h3>
           <div class="region-list">
             <span v-for="(c, i) in coverage.coveredList" :key="i" class="region-item">
               {{ c.province }} · {{ c.city }}
@@ -448,5 +448,10 @@ export default {
 
 @media (max-width: 1000px) {
   .screen-body { grid-template-columns: 1fr; }
+}
+.panel-title i {
+  color: #4be3a5;
+  margin-right: 6px;
+  font-size: 12px;
 }
 </style>

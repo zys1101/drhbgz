@@ -1,0 +1,209 @@
+/* ============================================================
+   东软环保公众监督系统 · 全局主题（生态绿设计系统）
+   品牌色：翡翠绿 #10b981 / 深绿 #047857，墨色 #0f172a
+   ============================================================ */
+
+:root {
+  /* Element Plus 品牌色定制 */
+  --el-color-primary: #10b981;
+  --el-color-primary-light-3: #4ad1a4;
+  --el-color-primary-light-5: #86e2c5;
+  --el-color-primary-light-7: #b9f0dd;
+  --el-color-primary-light-8: #d0f5e7;
+  --el-color-primary-light-9: #e7fbf2;
+  --el-color-primary-dark-2: #047857;
+
+  --nep-ink: #0f172a;
+  --nep-ink-2: #334155;
+  --nep-muted: #94a3b8;
+  --nep-bg: #f3f6f4;
+  --nep-card: #ffffff;
+  --nep-border: #e8eef0;
+  --nep-radius: 14px;
+  --nep-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.06);
+  --nep-shadow-lg: 0 8px 30px rgba(15, 23, 42, 0.10);
+
+  font-family: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Helvetica Neue',
+    Arial, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--nep-bg);
+  color: var(--nep-ink);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+/* ---------------- 通用页面卡片 ---------------- */
+.nep-card {
+  background: var(--nep-card);
+  border-radius: var(--nep-radius);
+  border: 1px solid var(--nep-border);
+  box-shadow: var(--nep-shadow);
+  overflow: hidden;
+}
+
+.nep-card-header {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--nep-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.nep-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--nep-ink);
+}
+
+.nep-card-title .nep-title-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+  color: #047857;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.nep-card-sub {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--nep-muted);
+}
+
+.nep-card-body {
+  padding: 20px 22px;
+}
+
+/* ---------------- 页面通用内边距 ---------------- */
+.nep-page {
+  padding: 20px 24px 28px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+/* ---------------- 表格包装（圆角） ---------------- */
+.nep-table-wrap {
+  padding: 4px 10px 12px;
+}
+
+.nep-table-wrap .el-table {
+  --el-table-header-bg-color: #f8faf9;
+  --el-table-header-text-color: #64748b;
+  --el-table-border-color: #eef2f1;
+  --el-table-row-hover-bg-color: #f2fbf7;
+}
+
+.nep-table-wrap .el-table th.el-table__cell {
+  font-weight: 600;
+}
+
+/* ---------------- 主按钮渐变 ---------------- */
+.el-button.nep-btn-gradient {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border: none;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+}
+
+.el-button.nep-btn-gradient:hover:not(.is-disabled) {
+  background: linear-gradient(135deg, #34d399, #10b981);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.45);
+  transform: translateY(-1px);
+}
+
+/* ---------------- 空状态 / 加载 ---------------- */
+.nep-empty {
+  padding: 70px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--nep-muted);
+}
+
+.nep-empty .nep-empty-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #eef2f1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  color: #b6c2c7;
+}
+
+/* ---------------- 滚动条美化 ---------------- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5d1;
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8b8b2;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------------- Element Plus 细节微调 ---------------- */
+.el-card {
+  border-radius: var(--nep-radius);
+}
+
+.el-dialog {
+  border-radius: 16px;
+}
+
+.el-table .el-table__cell {
+  padding: 10px 0;
+}
+
+.el-pagination {
+  --el-color-primary: #10b981;
+}
+
+/* 页面切换动画 */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+}

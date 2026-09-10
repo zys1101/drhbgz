@@ -1,68 +1,86 @@
 <template>
-  <div class="page">
-    <transition name="toast">
-      <div v-if="toast.show" class="toast" :class="toast.type">
-        <span class="toast-msg">{{ toast.message }}</span>
-      </div>
-    </transition>
-
-    <div class="card">
-      <div class="card-header">
-        <h2 class="card-title">提交空气质量监督信息</h2>
-        <p class="card-sub">参照《空气质量指数（AQI）范围及相应类别表》预估等级并描述观测情况</p>
-      </div>
-
-      <div v-if="!profile" class="no-profile">
-        <span class="no-profile-icon">📍</span>
-        <p>您还未绑定网格地址，请先完成地址绑定</p>
-        <button class="btn btn-primary" @click="$router.push('/sf/address')">去绑定地址</button>
+  <div class="nep-page">
+    <div class="nep-card form-card">
+      <div class="nep-card-header">
+        <div>
+          <h2 class="nep-card-title">
+            <span class="nep-title-icon"><i class="fa-solid fa-comment-dots"></i></span>
+            提交空气质量监督信息
+          </h2>
+          <p class="nep-card-sub">参照《空气质量指数（AQI）范围及相应类别表》预估等级并描述观测情况</p>
+        </div>
       </div>
 
-      <form v-else class="feedback-form" @submit.prevent="handleSubmit">
-        <div class="profile-bar">
-          <span class="profile-item">📍 {{ profile.provinceName }} · {{ profile.cityName }}</span>
-          <span class="profile-item">{{ profile.address }}</span>
-          <router-link to="/sf/address" class="profile-edit">修改地址</router-link>
+      <div class="nep-card-body">
+        <!-- 未绑定地址引导 -->
+        <div v-if="!profile" class="no-profile">
+          <i class="fa-solid fa-map-location-dot"></i>
+          <p>您还未绑定网格地址，请先完成地址绑定</p>
+          <el-button type="primary" class="nep-btn-gradient" @click="$router.push('/sf/address')">
+            <i class="fa-solid fa-location-dot" style="margin-right:6px"></i>去绑定地址
+          </el-button>
         </div>
 
-        <div class="form-row">
-          <div class="form-item">
-            <label class="form-label">预估AQI等级 <span class="required">*</span></label>
-            <select v-model="form.estimatedGrade" class="form-input" required>
-              <option v-for="g in gradeOptions" :key="g.value" :value="g.value">{{ g.label }}</option>
-            </select>
+        <el-form v-else label-position="top" size="large">
+          <!-- 已绑定地址条 -->
+          <div class="profile-bar">
+            <div class="profile-region">
+              <i class="fa-solid fa-location-dot"></i>
+              <b>{{ profile.provinceName }} · {{ profile.cityName }}</b>
+            </div>
+            <span class="profile-addr">{{ profile.address }}</span>
+            <el-link type="primary" :underline="false" @click="$router.push('/sf/address')">
+              <i class="fa-solid fa-pen"></i> 修改地址
+            </el-link>
           </div>
 
-          <div class="form-item">
-            <label class="form-label">观测时间</label>
-            <input type="datetime-local" v-model="observedAt" class="form-input">
+          <div class="row-2">
+            <el-form-item label="预估AQI等级">
+              <el-select v-model="form.estimatedGrade" style="width: 100%">
+                <el-option v-for="g in gradeOptions" :key="g.value" :value="g.value" :label="g.label" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="观测时间">
+              <el-date-picker v-model="observedAt" type="datetime" style="width: 100%"
+                format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" :clearable="false" />
+            </el-form-item>
           </div>
-        </div>
 
-        <div class="form-item">
-          <label class="form-label">空气质量描述 <span class="required">*</span></label>
-          <textarea
-            v-model.trim="form.information"
-            class="form-input form-textarea"
-            rows="4"
-            placeholder="请描述观测到的空气质量情况，如气味、能见度、污染源等..."
-            required
-          ></textarea>
-        </div>
+          <el-form-item label="空气质量描述">
+            <el-input v-model.trim="form.information" type="textarea" :rows="5" maxlength="500" show-word-limit
+              placeholder="描述您观测到的空气情况：如气味、扬尘、能见度、附近污染源等…" />
+          </el-form-item>
 
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary" :disabled="submitting">
-            {{ submitting ? '提交中...' : '提交反馈' }}
-          </button>
-        </div>
-      </form>
+          <!-- 当前等级参考卡 -->
+          <div class="grade-hint" :style="{ borderColor: hintColor }">
+            <i class="fa-solid fa-circle-info" :style="{ color: hintColor }"></i>
+            <span>{{ hintText }}</span>
+          </div>
+
+          <div class="form-actions">
+            <el-button type="primary" size="large" class="nep-btn-gradient" :loading="submitting" @click="handleSubmit">
+              <i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>提交反馈
+            </el-button>
+          </div>
+        </el-form>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
+import { ElMessage } from 'element-plus'
 import { saveAqiFeedback } from '../../api/aqiFeedback'
 import { AQI_GRADES } from '../../constants/aqi'
+
+const LEVEL_TIPS = {
+  1: { color: '#16a34a', text: '一级（优）：空气质量令人满意，基本无空气污染，各类人群可正常活动。' },
+  2: { color: '#65a30d', text: '二级（良）：空气质量可接受，极少数异常敏感人群应减少户外活动。' },
+  3: { color: '#d97706', text: '三级（轻度污染）：易感人群症状有轻度加剧，健康人群出现刺激症状。' },
+  4: { color: '#dc2626', text: '四级（中度污染）：进一步加剧易感人群症状，可能对健康人群心脏、呼吸系统有影响。' },
+  5: { color: '#be123c', text: '五级（重度污染）：心脏病和肺病患者症状显著加剧，健康人群普遍出现症状。' },
+  6: { color: '#7f1d1d', text: '六级（严重污染）：健康人群运动耐受力降低，有明显强烈症状，提前出现某些疾病。' }
+}
 
 export default {
   name: 'FeedbackSubmitView',
@@ -74,9 +92,7 @@ export default {
       },
       observedAt: '',
       gradeOptions: AQI_GRADES,
-      submitting: false,
-      toast: { show: false, type: 'success', message: '' },
-      toastTimer: null
+      submitting: false
     }
   },
   computed: {
@@ -85,28 +101,32 @@ export default {
     },
     user() {
       return this.$store.state.user || {}
+    },
+    hint() {
+      return LEVEL_TIPS[this.form.estimatedGrade] || LEVEL_TIPS[1]
+    },
+    hintColor() {
+      return this.hint.color
+    },
+    hintText() {
+      return this.hint.text
     }
   },
   created() {
     // 默认观测时间为当前时间
     const now = new Date()
     const pad = n => String(n).padStart(2, '0')
-    this.observedAt = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`
+    this.observedAt = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
   },
   methods: {
-    showToast(type, message) {
-      this.toast = { show: true, type, message }
-      if (this.toastTimer) clearTimeout(this.toastTimer)
-      this.toastTimer = setTimeout(() => { this.toast.show = false }, 2500)
-    },
     async handleSubmit() {
       if (!this.form.information) {
-        this.showToast('warning', '请填写空气质量描述')
+        ElMessage.warning('请填写空气质量描述')
         return
       }
       this.submitting = true
       try {
-        const [date, time] = this.observedAt ? this.observedAt.split('T') : ['', '']
+        const [date, time] = this.observedAt ? this.observedAt.split(' ') : ['', '']
         await saveAqiFeedback({
           telId: this.user.account,
           provinceId: Number(this.profile.provinceId),
@@ -117,11 +137,10 @@ export default {
           information: this.form.information,
           estimatedGrade: this.form.estimatedGrade
         })
-        this.showToast('success', '提交成功，等待管理员指派网格员检测')
+        ElMessage.success('提交成功，等待管理员指派网格员检测')
         this.form.information = ''
       } catch (err) {
-        console.error(err)
-        this.showToast('error', '提交失败，请确认后端服务已启动')
+        ElMessage.error(err.message || '提交失败，请确认后端服务已启动')
       } finally {
         this.submitting = false
       }
@@ -131,180 +150,96 @@ export default {
 </script>
 
 <style scoped>
-.page {
-  padding: 28px 32px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  text-align: left;
+.form-card {
+  max-width: 780px;
+  margin: 20px auto 0;
 }
 
-.card {
-  width: 720px;
-  max-width: 100%;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  overflow: hidden;
-}
-
-.card-header {
-  padding: 22px 28px;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.card-title {
-  margin: 0;
-  font-size: 19px;
-  color: #2c3e50;
-}
-
-.card-sub {
-  margin: 5px 0 0;
-  font-size: 13px;
-  color: #a8abb2;
-}
-
+/* 未绑定地址 */
 .no-profile {
-  padding: 70px 20px;
-  text-align: center;
-  color: #909399;
+  padding: 60px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  color: #94a3b8;
 }
 
-.no-profile-icon {
-  font-size: 44px;
-  display: block;
-  margin-bottom: 14px;
+.no-profile i {
+  font-size: 52px;
+  color: #cbd5e1;
 }
 
+.no-profile p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* 已绑定地址条 */
 .profile-bar {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 16px;
   flex-wrap: wrap;
-  margin: 20px 28px 0;
-  padding: 12px 16px;
-  background: #f0f9f4;
-  border: 1px solid #d9f0e4;
-  border-radius: 8px;
+  background: linear-gradient(120deg, #ecfdf5, #f0fdfa);
+  border: 1px solid #a7f3d0;
+  border-radius: 12px;
+  padding: 13px 18px;
+  margin-bottom: 22px;
+}
+
+.profile-region {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #047857;
+  font-size: 14px;
+}
+
+.profile-region i {
   font-size: 13px;
-  color: #2e8565;
 }
 
-.profile-edit {
-  margin-left: auto;
-  color: #42b983;
+.profile-addr {
+  flex: 1;
+  min-width: 160px;
   font-size: 13px;
-  text-decoration: none;
+  color: #334155;
 }
 
-.profile-edit:hover {
-  text-decoration: underline;
-}
-
-.feedback-form {
-  padding: 20px 28px 28px;
-}
-
-.form-row {
+.row-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
 }
 
-.form-item {
+/* 等级提示 */
+.grade-hint {
   display: flex;
-  flex-direction: column;
-  margin-bottom: 18px;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px dashed;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #475569;
+  background: #fafcfb;
+  margin-bottom: 6px;
 }
 
-.form-label {
-  font-size: 14px;
-  color: #303133;
-  margin-bottom: 7px;
-  font-weight: 500;
-}
-
-.required {
-  color: #f56c6c;
-}
-
-.form-input {
-  width: 100%;
-  padding: 10px 14px;
-  font-size: 14px;
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  background: #fff;
-  color: #303133;
-}
-
-.form-input:focus {
-  border-color: #42b983;
-  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.15);
-}
-
-.form-textarea {
-  resize: vertical;
-  font-family: inherit;
-  line-height: 1.6;
+.grade-hint i {
+  margin-top: 2px;
 }
 
 .form-actions {
   display: flex;
   justify-content: center;
-  margin-top: 8px;
+  margin-top: 14px;
 }
-
-.btn {
-  padding: 10px 34px;
-  font-size: 15px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 500;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #42b983, #2e8565);
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(66, 185, 131, 0.3);
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(66, 185, 131, 0.4);
-}
-
-/* Toast */
-.toast {
-  position: fixed;
-  top: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 22px;
-  border-radius: 8px;
-  font-size: 14px;
-  z-index: 9999;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-}
-
-.toast.success { background: #f0f9eb; color: #67c23a; border: 1px solid #e1f3d8; }
-.toast.error   { background: #fef0f0; color: #f56c6c; border: 1px solid #fde2e2; }
-.toast.warning { background: #fdf6ec; color: #e6a23c; border: 1px solid #faecd8; }
-
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, -20px); }
 
 @media (max-width: 640px) {
-  .form-row { grid-template-columns: 1fr; }
+  .row-2 {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

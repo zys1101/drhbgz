@@ -1,90 +1,101 @@
 <template>
-  <div class="page">
-    <div class="card">
-      <div class="card-header">
+  <div class="nep-page">
+    <div class="nep-card">
+      <div class="nep-card-header">
         <div>
-          <h2 class="card-title">统计数据管理</h2>
-          <p class="card-sub">确认后的 AQI 数据自动纳入以下统计维度</p>
+          <h2 class="nep-card-title">
+            <span class="nep-title-icon"><i class="fa-solid fa-chart-column"></i></span>
+            统计数据管理
+          </h2>
+          <p class="nep-card-sub">
+            五项统计：省分组超标 / AQI指数分布 / 12个月趋势 / 检测数量实时 / 全国网格覆盖率
+            <el-tag v-if="mock" type="warning" size="small" effect="plain" style="margin-left:8px">演示数据</el-tag>
+          </p>
         </div>
-        <span v-if="mock" class="mock-badge">演示数据（后端未连接）</span>
+        <el-button :icon="Refresh" circle @click="loadAll" />
       </div>
 
-      <div class="tab-bar">
-        <button
-          v-for="t in tabs"
-          :key="t.key"
-          class="tab-btn"
-          :class="{ active: activeTab === t.key }"
-          @click="activeTab = t.key"
-        >{{ t.label }}</button>
-      </div>
+      <div class="nep-card-body">
+        <el-tabs v-model="activeTab" class="stats-tabs">
+          <!-- 1. 省分组超标统计 -->
+          <el-tab-pane label="省分组超标统计" name="province">
+            <div class="chart-box"><VChart :option="provinceOption" /></div>
+            <el-table :data="provinceRows" size="small" :header-cell-style="{ background: '#f8faf9' }"
+              class="mini-table">
+              <el-table-column prop="province" label="省份" min-width="120" />
+              <el-table-column prop="so2" label="SO₂超标" width="100" align="center" />
+              <el-table-column prop="co" label="CO超标" width="100" align="center" />
+              <el-table-column prop="pm25" label="PM2.5超标" width="110" align="center" />
+              <el-table-column prop="aqi" label="AQI等级超标" width="120" align="center" />
+              <el-table-column prop="total" label="累计检测" width="100" align="center" />
+            </el-table>
+          </el-tab-pane>
 
-      <!-- 1. 省分组超标统计 -->
-      <div v-show="activeTab === 'province'" class="tab-body">
-        <VChart :option="provinceOption" height="420px" />
-      </div>
+          <!-- 2. AQI指数分布 -->
+          <el-tab-pane label="AQI指数分布" name="distribution">
+            <div class="split">
+              <div class="chart-box tall"><VChart :option="distributionOption" /></div>
+              <div class="dist-list">
+                <div v-for="(item, i) in distribution" :key="i" class="dist-item">
+                  <span class="dist-dot" :style="{ background: distColors[i] }"></span>
+                  <span class="dist-name">{{ item.name }}</span>
+                  <span class="dist-value">{{ item.value }} 条</span>
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
 
-      <!-- 2. AQI 指数分布统计 -->
-      <div v-show="activeTab === 'distribution'" class="tab-body">
-        <VChart :option="distributionOption" height="420px" />
-      </div>
+          <!-- 3. AQI指数趋势 -->
+          <el-tab-pane label="AQI指数趋势" name="trend">
+            <p class="pane-tip">当前 12 个月内，每个月的全国 AQI 超标累计数量</p>
+            <div class="chart-box tall"><VChart :option="trendOption" /></div>
+          </el-tab-pane>
 
-      <!-- 3. AQI 指数趋势统计 -->
-      <div v-show="activeTab === 'trend'" class="tab-body">
-        <VChart :option="trendOption" height="420px" />
-      </div>
+          <!-- 4. 实时统计 -->
+          <el-tab-pane label="实时统计" name="realtime">
+            <div class="rt-grid">
+              <StatCard icon="fa-solid fa-flask-vial" label="AQI 检测累计数量" :value="realtime.total" color="#0ea5e9" />
+              <StatCard icon="fa-solid fa-face-smile" label="检测结果良好累计" :value="realtime.good" color="#10b981" />
+              <StatCard icon="fa-solid fa-face-dizzy" label="检测结果超标累计" :value="realtime.exceed" color="#ef4444" />
+            </div>
+            <div class="chart-box tall"><VChart :option="realtimePieOption" /></div>
+          </el-tab-pane>
 
-      <!-- 4. 实时统计 -->
-      <div v-show="activeTab === 'realtime'" class="tab-body">
-        <div class="rt-grid">
-          <div class="rt-card">
-            <span class="rt-icon" style="background: #ecf5ff; color: #409eff;">🧪</span>
-            <span class="rt-value">{{ realtime.total }}</span>
-            <span class="rt-label">AQI检测累计数量</span>
-          </div>
-          <div class="rt-card">
-            <span class="rt-icon" style="background: #f0f9eb; color: #67c23a;">🌿</span>
-            <span class="rt-value">{{ realtime.good }}</span>
-            <span class="rt-label">检测结果良好累计数量</span>
-          </div>
-          <div class="rt-card">
-            <span class="rt-icon" style="background: #fef0f0; color: #f56c6c;">⚠️</span>
-            <span class="rt-value">{{ realtime.exceed }}</span>
-            <span class="rt-label">检测结果超标累计数量</span>
-          </div>
-        </div>
-        <VChart :option="realtimePieOption" height="360px" />
-      </div>
-
-      <!-- 5. 全国网格覆盖率统计 -->
-      <div v-show="activeTab === 'coverage'" class="tab-body">
-        <div class="cov-grid">
-          <div class="cov-card">
-            <div class="cov-num">{{ coverage.provinceCovered }}<span class="cov-total"> / {{ coverage.provinceTotal }}</span></div>
-            <div class="cov-name">覆盖省份</div>
-            <div class="cov-bar"><div class="cov-inner" :style="{ width: provincePercent + '%' }"></div></div>
-            <div class="cov-pct">覆盖率 {{ provincePercent }}%</div>
-          </div>
-          <div class="cov-card">
-            <div class="cov-num">{{ coverage.cityCovered }}<span class="cov-total"> / {{ coverage.cityTotal }}</span></div>
-            <div class="cov-name">覆盖大城市（2022年名单）</div>
-            <div class="cov-bar"><div class="cov-inner" :style="{ width: cityPercent + '%' }"></div></div>
-            <div class="cov-pct">覆盖率 {{ cityPercent }}%</div>
-          </div>
-        </div>
-        <div class="cov-list-title">已覆盖网格区域</div>
-        <div class="cov-list">
-          <span v-for="(c, i) in coverage.coveredList" :key="i" class="cov-item">
-            📍 {{ c.province }} · {{ c.city }}
-          </span>
-        </div>
+          <!-- 5. 网格覆盖率 -->
+          <el-tab-pane label="网格覆盖率" name="coverage">
+            <p class="pane-tip">当前使用本系统的网格区域在全国所有省 / 所有大城市中的覆盖率</p>
+            <div class="cov-cards">
+              <div class="cov-card">
+                <div class="cov-head">
+                  <i class="fa-solid fa-map"></i> 省份覆盖率
+                </div>
+                <div class="cov-num">{{ coverage.provinceCovered }}<small>/{{ coverage.provinceTotal }} 省</small></div>
+                <el-progress :percentage="provincePercent" :stroke-width="12" />
+              </div>
+              <div class="cov-card">
+                <div class="cov-head">
+                  <i class="fa-solid fa-city"></i> 大城市覆盖率
+                </div>
+                <div class="cov-num">{{ coverage.cityCovered }}<small>/{{ coverage.cityTotal }} 个大城市</small></div>
+                <el-progress :percentage="cityPercent" :stroke-width="12" color="#0ea5e9" />
+              </div>
+            </div>
+            <div class="covered-chips">
+              <el-tag v-for="(c, i) in coverage.coveredList" :key="i" effect="plain" class="cov-chip">
+                <i class="fa-solid fa-location-dot" style="margin-right:4px"></i>{{ c.province }} · {{ c.city }}
+              </el-tag>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </div>
   </div>
 </template>
 
 <script>
+import { Refresh } from '@element-plus/icons-vue'
 import VChart from '../../components/VChart.vue'
+import StatCard from '../../components/StatCard.vue'
 import {
   getProvinceStats, getDistributionStats, getTrendStats,
   getRealtimeStats, getCoverageStats
@@ -92,23 +103,18 @@ import {
 
 export default {
   name: 'StatsView',
-  components: { VChart },
+  components: { VChart, StatCard },
   data() {
     return {
+      Refresh,
       activeTab: 'province',
-      tabs: [
-        { key: 'province', label: '省分组超标统计' },
-        { key: 'distribution', label: 'AQI指数分布' },
-        { key: 'trend', label: 'AQI指数趋势' },
-        { key: 'realtime', label: '实时统计' },
-        { key: 'coverage', label: '网格覆盖率' }
-      ],
       mock: false,
       provinceRows: [],
       distribution: [],
       trend: [],
       realtime: { total: 0, good: 0, exceed: 0 },
-      coverage: { provinceCovered: 0, provinceTotal: 34, cityCovered: 0, cityTotal: 106, coveredList: [] }
+      coverage: { provinceCovered: 0, provinceTotal: 34, cityCovered: 0, cityTotal: 106, coveredList: [] },
+      distColors: ['#10b981', '#84cc16', '#f59e0b', '#f97316', '#ef4444', '#7f1d1d']
     }
   },
   computed: {
@@ -122,7 +128,7 @@ export default {
     },
     provinceOption() {
       return {
-        color: ['#f56c6c', '#e6a23c', '#409eff', '#2e8565'],
+        color: ['#ef4444', '#f97316', '#f59e0b', '#10b981'],
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
         legend: { data: ['SO₂超标', 'CO超标', 'PM2.5超标', 'AQI等级超标'], top: 6 },
         grid: { left: 50, right: 24, top: 60, bottom: 70 },
@@ -142,16 +148,16 @@ export default {
     },
     distributionOption() {
       return {
-        color: ['#95e8a7', '#b3e19d', '#f3d19e', '#fab6b6', '#f89898', '#7b4a12'],
+        color: this.distColors,
         tooltip: { trigger: 'item', formatter: '{b}：{c} 条（{d}%）' },
-        legend: { orient: 'vertical', left: 'left', top: 'middle' },
+        legend: { show: false },
         series: [
           {
             name: 'AQI等级分布',
             type: 'pie',
             radius: ['42%', '68%'],
-            center: ['55%', '52%'],
-            label: { formatter: '{b}\n{d}%' },
+            center: ['50%', '52%'],
+            label: { formatter: '{d}%' },
             data: this.distribution
           }
         ]
@@ -159,7 +165,7 @@ export default {
     },
     trendOption() {
       return {
-        color: ['#e6a23c'],
+        color: ['#f59e0b'],
         tooltip: { trigger: 'axis' },
         grid: { left: 50, right: 30, top: 40, bottom: 40 },
         xAxis: { type: 'category', data: this.trend.map(t => t.month), boundaryGap: false },
@@ -179,7 +185,7 @@ export default {
     },
     realtimePieOption() {
       return {
-        color: ['#67c23a', '#f56c6c'],
+        color: ['#10b981', '#ef4444'],
         tooltip: { trigger: 'item', formatter: '{b}：{c} 条（{d}%）' },
         legend: { bottom: 0 },
         series: [
@@ -198,214 +204,154 @@ export default {
       }
     }
   },
-  async created() {
-    const [p, d, t, r, c] = await Promise.allSettled([
-      getProvinceStats(), getDistributionStats(), getTrendStats(),
-      getRealtimeStats(), getCoverageStats()
-    ])
-    if (p.status === 'fulfilled') { this.provinceRows = p.value.data; this.mock = this.mock || p.value.mock }
-    if (d.status === 'fulfilled') { this.distribution = d.value.data; this.mock = this.mock || d.value.mock }
-    if (t.status === 'fulfilled') { this.trend = t.value.data; this.mock = this.mock || t.value.mock }
-    if (r.status === 'fulfilled') { this.realtime = r.value.data; this.mock = this.mock || r.value.mock }
-    if (c.status === 'fulfilled') { this.coverage = c.value.data; this.mock = this.mock || c.value.mock }
+  created() {
+    this.loadAll()
+  },
+  methods: {
+    async loadAll() {
+      const [p, d, t, r, c] = await Promise.allSettled([
+        getProvinceStats(), getDistributionStats(), getTrendStats(),
+        getRealtimeStats(), getCoverageStats()
+      ])
+      if (p.status === 'fulfilled') { this.provinceRows = p.value.data; this.mock = this.mock || p.value.mock }
+      if (d.status === 'fulfilled') { this.distribution = d.value.data; this.mock = this.mock || d.value.mock }
+      if (t.status === 'fulfilled') { this.trend = t.value.data; this.mock = this.mock || t.value.mock }
+      if (r.status === 'fulfilled') { this.realtime = r.value.data; this.mock = this.mock || r.value.mock }
+      if (c.status === 'fulfilled') { this.coverage = c.value.data; this.mock = this.mock || c.value.mock }
+    }
   }
 }
 </script>
 
 <style scoped>
-.page {
-  padding: 28px 32px;
-  text-align: left;
+.stats-tabs :deep(.el-tabs__item.is-active) {
+  color: #047857;
 }
 
-.card {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  overflow: hidden;
+.stats-tabs :deep(.el-tabs__active-bar) {
+  background-color: #10b981;
 }
 
-.card-header {
-  padding: 22px 28px;
-  border-bottom: 1px solid #ebeef5;
+.chart-box {
+  height: 380px;
+}
+
+.chart-box.tall {
+  height: 420px;
+}
+
+.pane-tip {
+  margin: 2px 0 12px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.mini-table {
+  margin-top: 8px;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 20px;
+  align-items: center;
+}
+
+.dist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dist-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
+  font-size: 13.5px;
 }
 
-.card-title {
-  margin: 0;
-  font-size: 19px;
-  color: #2c3e50;
+.dist-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
 }
 
-.card-sub {
-  margin: 5px 0 0;
-  font-size: 13px;
-  color: #a8abb2;
+.dist-name {
+  flex: 1;
+  color: #475569;
 }
 
-.mock-badge {
-  font-size: 12px;
-  color: #e6a23c;
-  background: #fdf6ec;
-  border: 1px solid #faecd8;
-  padding: 4px 12px;
-  border-radius: 12px;
+.dist-value {
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
 }
 
-.tab-bar {
-  display: flex;
-  gap: 4px;
-  padding: 12px 28px 0;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.tab-btn {
-  padding: 10px 18px;
-  border: none;
-  background: transparent;
-  font-size: 14px;
-  color: #606266;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all 0.2s;
-}
-
-.tab-btn:hover {
-  color: #2e8565;
-}
-
-.tab-btn.active {
-  color: #2e8565;
-  font-weight: 600;
-  border-bottom-color: #42b983;
-}
-
-.tab-body {
-  padding: 20px 28px 28px;
-}
-
-/* 实时统计 */
 .rt-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-bottom: 20px;
-}
-
-.rt-card {
-  background: #fafbfc;
-  border: 1px solid #ebeef5;
-  border-radius: 12px;
-  padding: 22px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.rt-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-}
-
-.rt-value {
-  font-size: 34px;
-  font-weight: 700;
-  color: #2c3e50;
-  line-height: 1;
-}
-
-.rt-label {
-  font-size: 13px;
-  color: #909399;
-}
-
-/* 覆盖率 */
-.cov-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
-  margin-bottom: 24px;
-}
-
-.cov-card {
-  background: #fafbfc;
-  border: 1px solid #ebeef5;
-  border-radius: 12px;
-  padding: 24px;
-  text-align: center;
-}
-
-.cov-num {
-  font-size: 38px;
-  font-weight: 700;
-  color: #2e8565;
-  line-height: 1;
-}
-
-.cov-total {
-  font-size: 16px;
-  color: #a8abb2;
-  font-weight: 400;
-}
-
-.cov-name {
-  margin-top: 8px;
-  font-size: 14px;
-  color: #606266;
-}
-
-.cov-bar {
-  height: 10px;
-  background: #ebeef5;
-  border-radius: 5px;
-  margin: 14px 10px 8px;
-  overflow: hidden;
-}
-
-.cov-inner {
-  height: 100%;
-  border-radius: 5px;
-  background: linear-gradient(90deg, #42b983, #2e8565);
-  transition: width 0.6s ease;
-}
-
-.cov-pct {
-  font-size: 12px;
-  color: #909399;
-}
-
-.cov-list-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
+  gap: 16px;
   margin-bottom: 12px;
 }
 
-.cov-list {
+/* 覆盖率 */
+.cov-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.cov-card {
+  border: 1px solid var(--nep-border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+
+.cov-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 10px;
+}
+
+.cov-head i {
+  color: #10b981;
+}
+
+.cov-num {
+  font-size: 30px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cov-num small {
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+.covered-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
-.cov-item {
-  font-size: 13px;
-  color: #2e8565;
-  background: #f0f9f4;
-  border: 1px solid #d9f0e4;
-  padding: 6px 14px;
-  border-radius: 16px;
+.cov-chip {
+  border-radius: 8px;
 }
 
-@media (max-width: 900px) {
-  .rt-grid { grid-template-columns: 1fr; }
-  .cov-grid { grid-template-columns: 1fr; }
+@media (max-width: 1000px) {
+  .split,
+  .rt-grid,
+  .cov-cards {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

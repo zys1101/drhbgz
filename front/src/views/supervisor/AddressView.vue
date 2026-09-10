@@ -1,64 +1,51 @@
 <template>
-  <div class="page">
-    <transition name="toast">
-      <div v-if="toast.show" class="toast" :class="toast.type">
-        <span class="toast-msg">{{ toast.message }}</span>
+  <div class="nep-page">
+    <div class="nep-card form-card">
+      <div class="nep-card-header">
+        <div>
+          <h2 class="nep-card-title">
+            <span class="nep-title-icon"><i class="fa-solid fa-location-dot"></i></span>
+            网格地址绑定
+          </h2>
+          <p class="nep-card-sub">选择您所在的网格区域（省、市），并填写日常观测的具体地址</p>
+        </div>
       </div>
-    </transition>
 
-    <div class="card">
-      <div class="card-header">
-        <h2 class="card-title">网格地址绑定</h2>
-        <p class="card-sub">选择您所在的网格区域（省、市），并填写日常观测的具体地址</p>
+      <div class="nep-card-body">
+        <el-form label-position="top" size="large" class="address-form">
+          <div class="row-2">
+            <el-form-item label="省份">
+              <el-select v-model="form.provinceId" placeholder="请选择省份" filterable style="width: 100%"
+                @change="onProvinceChange">
+                <el-option v-for="p in provinces" :key="p.provinceId" :value="p.provinceId" :label="p.provinceName" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="城市">
+              <el-select v-model="form.cityId" placeholder="请先选择省份" filterable style="width: 100%"
+                :loading="cityLoading">
+                <el-option v-for="c in cities" :key="c.cityId" :value="c.cityId" :label="c.cityName" />
+              </el-select>
+            </el-form-item>
+          </div>
+          <el-form-item label="具体地址">
+            <el-input v-model.trim="form.address" maxlength="100" show-word-limit clearable
+              placeholder="请输入您观测空气质量的具体地址（100字以内）">
+              <template #prefix><i class="fa-solid fa-map-pin"></i></template>
+            </el-input>
+          </el-form-item>
+          <div class="form-actions">
+            <el-button type="primary" size="large" class="nep-btn-gradient" :loading="saving" @click="handleSave">
+              <i class="fa-solid fa-floppy-disk" style="margin-right:6px"></i>保存地址
+            </el-button>
+          </div>
+        </el-form>
       </div>
-
-      <form class="address-form" @submit.prevent="handleSave">
-        <div class="form-row">
-          <div class="form-item">
-            <label class="form-label">省份 <span class="required">*</span></label>
-            <select v-model="form.provinceId" @change="onProvinceChange" class="form-input">
-              <option value="" disabled>请选择省份</option>
-              <option v-for="p in provinces" :key="p.provinceId" :value="p.provinceId">
-                {{ p.provinceName }}
-              </option>
-            </select>
-          </div>
-
-          <div class="form-item">
-            <label class="form-label">城市 <span class="required">*</span></label>
-            <select v-model="form.cityId" class="form-input" :disabled="cities.length === 0">
-              <option value="" disabled>{{ cities.length === 0 ? '请先选择省份' : '请选择城市' }}</option>
-              <option v-for="c in cities" :key="c.cityId" :value="c.cityId">
-                {{ c.cityName }}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-item">
-          <label class="form-label">具体地址 <span class="required">*</span></label>
-          <input
-            type="text"
-            v-model.trim="form.address"
-            class="form-input"
-            :class="{ 'has-error': errors.address }"
-            placeholder="请输入您观测空气质量的具体地址（100字以内）"
-            maxlength="100"
-          >
-          <span v-if="errors.address" class="error-msg">{{ errors.address }}</span>
-        </div>
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary" :disabled="saving">
-            {{ saving ? '保存中...' : '保存地址' }}
-          </button>
-        </div>
-      </form>
     </div>
   </div>
 </template>
 
 <script>
+import { ElMessage } from 'element-plus'
 import { getProvinces, getCityByPid } from '../../api/aqiFeedback'
 import { getProfile, saveProfile } from '../../api/auth'
 
@@ -73,10 +60,13 @@ export default {
       },
       provinces: [],
       cities: [],
-      errors: {},
-      saving: false,
-      toast: { show: false, type: 'success', message: '' },
-      toastTimer: null
+      cityLoading: false,
+      saving: false
+    }
+  },
+  computed: {
+    myAccount() {
+      return this.$store.state.user ? this.$store.state.user.account : ''
     }
   },
   async created() {
@@ -89,9 +79,9 @@ export default {
         await this.loadCities(profile.provinceId)
         this.form.cityId = profile.cityId
       }
-    } else if (this.myAccount()) {
+    } else if (this.myAccount) {
       try {
-        const res = await getProfile(this.myAccount())
+        const res = await getProfile(this.myAccount)
         const sup = res.data
         if (sup && sup.provinceId) {
           await this.loadCities(sup.provinceId)
@@ -105,14 +95,6 @@ export default {
     this.loadProvinces()
   },
   methods: {
-    myAccount() {
-      return this.$store.state.user ? this.$store.state.user.account : ''
-    },
-    showToast(type, message) {
-      this.toast = { show: true, type, message }
-      if (this.toastTimer) clearTimeout(this.toastTimer)
-      this.toastTimer = setTimeout(() => { this.toast.show = false }, 2500)
-    },
     async loadProvinces() {
       try {
         const res = await getProvinces()
@@ -122,16 +104,16 @@ export default {
       } catch (err) {
         // 后端未提供省市接口时使用演示行政区划
         this.provinces = this.demoProvinces()
-        this.showToast('warning', '后端省份接口未连接，当前为演示行政区划')
+        ElMessage.warning('后端省份接口未连接，当前为演示行政区划')
       }
     },
     demoProvinces() {
       return [
-        { provinceId: 1, provinceName: '河北省', cities: [ { cityId: 1, cityName: '石家庄市' }, { cityId: 3, cityName: '保定市' }, { cityId: 4, cityName: '廊坊市' }, { cityId: 5, cityName: '沧州市' } ] },
-        { provinceId: 2, provinceName: '辽宁省', cities: [ { cityId: 6, cityName: '沈阳市' }, { cityId: 7, cityName: '大连市' } ] },
-        { provinceId: 3, provinceName: '吉林省', cities: [ { cityId: 8, cityName: '长春市' } ] },
-        { provinceId: 4, provinceName: '黑龙江省', cities: [ { cityId: 9, cityName: '哈尔滨市' } ] },
-        { provinceId: 5, provinceName: '山东省', cities: [ { cityId: 10, cityName: '济南市' }, { cityId: 11, cityName: '青岛市' } ] }
+        { provinceId: 1, provinceName: '河北省', cities: [{ cityId: 1, cityName: '石家庄市' }, { cityId: 3, cityName: '保定市' }, { cityId: 4, cityName: '廊坊市' }, { cityId: 5, cityName: '沧州市' }] },
+        { provinceId: 2, provinceName: '辽宁省', cities: [{ cityId: 6, cityName: '沈阳市' }, { cityId: 7, cityName: '大连市' }] },
+        { provinceId: 3, provinceName: '吉林省', cities: [{ cityId: 8, cityName: '长春市' }] },
+        { provinceId: 4, provinceName: '黑龙江省', cities: [{ cityId: 9, cityName: '哈尔滨市' }] },
+        { provinceId: 5, provinceName: '山东省', cities: [{ cityId: 10, cityName: '济南市' }, { cityId: 11, cityName: '青岛市' }] }
       ]
     },
     async loadCities(provinceId) {
@@ -140,13 +122,16 @@ export default {
         this.cities = province.cities
         return
       }
+      this.cityLoading = true
       try {
         const res = await getCityByPid(provinceId)
         if (res.data.code === 200) {
           this.cities = res.data.data || []
         }
       } catch (err) {
-        this.showToast('error', '城市列表加载失败')
+        ElMessage.error('城市列表加载失败')
+      } finally {
+        this.cityLoading = false
       }
     },
     async onProvinceChange() {
@@ -166,33 +151,30 @@ export default {
       })
     },
     async handleSave() {
-      const errors = {}
       if (!this.form.provinceId || !this.form.cityId) {
-        this.showToast('warning', '请选择完整网格区域（省、市）')
+        ElMessage.warning('请选择完整网格区域（省、市）')
         return
       }
       if (!this.form.address) {
-        errors.address = '请填写有效地址'
+        ElMessage.warning('请填写有效地址')
+        return
       }
-      this.errors = errors
-      if (Object.keys(errors).length) return
-
       const province = this.provinces.find(p => p.provinceId === this.form.provinceId)
       const city = this.cities.find(c => c.cityId === this.form.cityId)
       this.saving = true
       try {
         // 保存到监督员档案接口（用例3-3），后端未连接时降级为本地保存
         const res = await saveProfile({
-          account: this.myAccount(),
+          account: this.myAccount,
           provinceId: this.form.provinceId,
           cityId: this.form.cityId,
           address: this.form.address
         })
         const sup = res.data || {}
         this.persistProfile(sup, province, city)
-        this.showToast('success', '地址保存成功' + (res.mock ? '（本地演示）' : ''))
+        ElMessage.success('地址保存成功' + (res.mock ? '（本地演示）' : ''))
       } catch (err) {
-        this.showToast('error', err.message || '地址保存失败')
+        ElMessage.error(err.message || '地址保存失败')
       } finally {
         this.saving = false
       }
@@ -202,92 +184,19 @@ export default {
 </script>
 
 <style scoped>
-.page {
-  padding: 28px 32px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  text-align: left;
-}
-
-.card {
-  width: 720px;
-  max-width: 100%;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  overflow: hidden;
-}
-
-.card-header {
-  padding: 22px 28px;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.card-title {
-  margin: 0;
-  font-size: 19px;
-  color: #2c3e50;
-}
-
-.card-sub {
-  margin: 5px 0 0;
-  font-size: 13px;
-  color: #a8abb2;
+.form-card {
+  max-width: 720px;
+  margin: 20px auto 0;
 }
 
 .address-form {
-  padding: 28px;
+  max-width: 640px;
 }
 
-.form-row {
+.row-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
-}
-
-.form-item {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 18px;
-}
-
-.form-label {
-  font-size: 14px;
-  color: #303133;
-  margin-bottom: 7px;
-  font-weight: 500;
-}
-
-.required {
-  color: #f56c6c;
-}
-
-.form-input {
-  width: 100%;
-  padding: 10px 14px;
-  font-size: 14px;
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  background: #fff;
-  color: #303133;
-}
-
-.form-input:focus {
-  border-color: #42b983;
-  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.15);
-}
-
-.form-input.has-error {
-  border-color: #f56c6c;
-}
-
-.error-msg {
-  font-size: 12px;
-  color: #f56c6c;
-  margin-top: 5px;
 }
 
 .form-actions {
@@ -296,53 +205,9 @@ export default {
   margin-top: 8px;
 }
 
-.btn {
-  padding: 10px 34px;
-  font-size: 15px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 500;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #42b983, #2e8565);
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(66, 185, 131, 0.3);
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(66, 185, 131, 0.4);
-}
-
-/* Toast */
-.toast {
-  position: fixed;
-  top: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 22px;
-  border-radius: 8px;
-  font-size: 14px;
-  z-index: 9999;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-}
-
-.toast.success { background: #f0f9eb; color: #67c23a; border: 1px solid #e1f3d8; }
-.toast.error   { background: #fef0f0; color: #f56c6c; border: 1px solid #fde2e2; }
-.toast.warning { background: #fdf6ec; color: #e6a23c; border: 1px solid #faecd8; }
-
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, -20px); }
-
 @media (max-width: 640px) {
-  .form-row { grid-template-columns: 1fr; }
+  .row-2 {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
