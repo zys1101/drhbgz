@@ -119,7 +119,7 @@
 </template>
 
 <script>
-import { getAqiDataList, rejectAqiData } from '../../api/task'
+import { getAqiDataList, rejectAqiData, confirmAqiData } from '../../api/task'
 import { AQI_GRADES, gradeText } from '../../constants/aqi'
 
 export default {
@@ -182,14 +182,26 @@ export default {
       this.detail = item
     },
     confirmData(item) {
-      item.state = 1
-      this.showToast('success', '数据已确认，纳入统计范围')
+      this.confirming = true
+      confirmAqiData(item.dataId)
+        .then(res => {
+          item.state = 1
+          this.showToast('success', '数据已确认' + (res.mock ? '（演示数据）' : '') + '，纳入统计范围')
+        })
+        .catch(err => {
+          this.showToast('error', (err && err.message) || '确认失败，请重试')
+        })
+        .finally(() => { this.confirming = false })
     },
     async handleReject(item) {
       if (!confirm('退回后该任务将重新变为待指派，需要重新指派检测。确定退回吗？')) return
-      await rejectAqiData(item.dataId)
-      item.state = 2
-      this.showToast('success', '已退回，任务重新进入待指派状态')
+      try {
+        const res = await rejectAqiData(item.dataId)
+        item.state = 2
+        this.showToast('success', '已退回' + (res.mock ? '（演示数据）' : '') + '，任务重新进入待指派状态')
+      } catch (err) {
+        this.showToast('error', (err && err.message) || '退回失败，请重试')
+      }
     }
   }
 }

@@ -60,6 +60,7 @@
 
 <script>
 import { getProvinces, getCityByPid } from '../../api/aqiFeedback'
+import { getProfile, saveProfile } from '../../api/auth'
 
 export default {
   name: 'AddressView',
@@ -79,7 +80,7 @@ export default {
     }
   },
   async created() {
-    // 回显已绑定地址
+    // 回显已绑定地址（优先本地，本地为空则从后端档案拉取）
     const profile = this.$store.state.profile
     if (profile) {
       this.form.provinceId = profile.provinceId
@@ -88,10 +89,25 @@ export default {
         await this.loadCities(profile.provinceId)
         this.form.cityId = profile.cityId
       }
+    } else if (this.myAccount()) {
+      try {
+        const res = await getProfile(this.myAccount())
+        const sup = res.data
+        if (sup && sup.provinceId) {
+          await this.loadCities(sup.provinceId)
+          this.form.provinceId = sup.provinceId
+          this.form.cityId = sup.cityId
+          this.form.address = sup.address || ''
+          this.persistProfile(sup)
+        }
+      } catch (e) { /* 忽略，保持空表单 */ }
     }
     this.loadProvinces()
   },
   methods: {
+    myAccount() {
+      return this.$store.state.user ? this.$store.state.user.account : ''
+    },
     showToast(type, message) {
       this.toast = { show: true, type, message }
       if (this.toastTimer) clearTimeout(this.toastTimer)
@@ -140,6 +156,15 @@ export default {
         await this.loadCities(this.form.provinceId)
       }
     },
+    persistProfile(sup, province, city) {
+      this.$store.dispatch('saveProfile', {
+        provinceId: sup.provinceId,
+        provinceName: (province && province.provinceName) || sup.provinceName || '',
+        cityId: sup.cityId,
+        cityName: (city && city.cityName) || sup.cityName || '',
+        address: sup.address
+      })
+    },
     async handleSave() {
       const errors = {}
       if (!this.form.provinceId || !this.form.cityId) {
@@ -155,16 +180,22 @@ export default {
       const province = this.provinces.find(p => p.provinceId === this.form.provinceId)
       const city = this.cities.find(c => c.cityId === this.form.cityId)
       this.saving = true
-      // TODO: 后端就绪后保存到用户档案接口
-      this.$store.dispatch('saveProfile', {
-        provinceId: this.form.provinceId,
-        provinceName: province ? province.provinceName : '',
-        cityId: this.form.cityId,
-        cityName: city ? city.cityName : '',
-        address: this.form.address
-      })
-      this.showToast('success', '地址保存成功')
-      this.saving = false
+      try {
+        // 保存到监督员档案接口（用例3-3），后端未连接时降级为本地保存
+        const res = await saveProfile({
+          account: this.myAccount(),
+          provinceId: this.form.provinceId,
+          cityId: this.form.cityId,
+          address: this.form.address
+        })
+        const sup = res.data || {}
+        this.persistProfile(sup, province, city)
+        this.showToast('success', '地址保存成功' + (res.mock ? '（本地演示）' : ''))
+      } catch (err) {
+        this.showToast('error', err.message || '地址保存失败')
+      } finally {
+        this.saving = false
+      }
     }
   }
 }

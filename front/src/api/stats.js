@@ -1,13 +1,12 @@
-import axios from 'axios'
-import { getAqiFeedbackList } from './aqiFeedback.js'
+import request, { isNetworkError } from './request'
+import { getAqiFeedbackList } from './aqiFeedback'
 
-// 统计数据接口（NEPM 统计数据管理 / NEPV 可视化大屏）。
-// 五项统计：省分组超标统计、AQI指数分布、12个月趋势、实时统计、网格覆盖率。
-// TODO: 后端就绪后删除 fallback 部分，直接使用真实接口。
-const request = axios.create({
-  baseURL: 'http://localhost:9000/',
-  timeout: 3000
-})
+/**
+ * 统计数据接口（NEPM 统计数据管理 / NEPV 可视化大屏）
+ * 五项统计：省分组超标统计、AQI指数分布、12个月趋势、实时统计、网格覆盖率
+ * 后端：GET /api/stats/province | /distribution | /trend | /realtime | /coverage
+ * 后端未连接时降级为前端聚合/演示数据
+ */
 
 // 全国 106 个大城市中优先覆盖的示例网格（演示数据）
 const COVERED_CITIES = [
@@ -24,13 +23,16 @@ const TOTAL_BIG_CITIES = 106
 
 async function tryApi(url, fallback) {
   try {
-    const res = await request({ url, method: 'get' })
+    const res = await request.get(url)
     if (res.data.code === 200) {
       return { data: res.data.data, mock: false }
     }
     throw new Error('bad code')
   } catch (err) {
-    return { data: await fallback(), mock: true }
+    if (isNetworkError(err)) {
+      return { data: await fallback(), mock: true }
+    }
+    throw err
   }
 }
 
@@ -98,7 +100,7 @@ export function getTrendStats() {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
     }
-    // 固定形态的演示曲线（后端就绪后替换为真实统计）
+    // 固定形态的演示曲线（后端未连接时使用）
     const values = [86, 102, 95, 78, 64, 58, 49, 52, 61, 74, 90, 83]
     return months.map((m, i) => ({ month: m, exceed: values[i] }))
   })

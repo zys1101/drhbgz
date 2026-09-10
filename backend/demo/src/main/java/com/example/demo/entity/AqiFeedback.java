@@ -89,14 +89,30 @@ public class AqiFeedback implements Serializable {
     /**
      * 信息状态 0:未指派1:已指派 2:已确认
      */
+    /**
+     * 状态: 0待指派 1已指派 2已提交实测待确认 3已确认(已完成)
+     */
+    public static final int STATE_UNASSIGNED = 0;
+    public static final int STATE_ASSIGNED = 1;
+    public static final int STATE_MEASURED = 2;
+    public static final int STATE_CONFIRMED = 3;
+
     private Integer state;
 
     /**
      * 备注
      */
     private String remarks;
+
+    // ---------------- 关联展示字段 ----------------
     @TableField(exist = false)
     private String provinceName;
     @TableField(exist = false)
     private String cityName;
+    /** 指派网格员姓名 */
+    @TableField(exist = false)
+    private String gridName;
+    /** 指派网格员登录编码 */
+    @TableField(exist = false)
+    private String gridCode;
 }

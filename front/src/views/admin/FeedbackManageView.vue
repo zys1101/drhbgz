@@ -273,13 +273,13 @@ export default {
         const res = await assignTask(this.assignItem.afId, this.chosenWorker, this.assignItem)
         const worker = this.workers.find(w => w.gridCode === this.chosenWorker)
         const isLocal = worker && worker.region === (this.assignItem.provinceName || '') + '-' + (this.assignItem.cityName || '')
-        // 本地更新列表状态（后端就绪后由列表刷新获得）
-        this.assignItem.state = 1
         this.showToast('success', (isLocal ? '本地指派' : '异地指派') + '成功，已通知网格员' + (res.mock ? '（演示数据）' : ''))
         this.assigning = false
+        // 从后端刷新列表，获取最新状态（后端未连接时保留本地状态变更）
+        this.fetchList()
       } catch (err) {
         console.error(err)
-        this.showToast('error', '指派失败，请重试')
+        this.showToast('error', (err && err.message) || '指派失败，请重试')
       } finally {
         this.assigning2 = false
       }

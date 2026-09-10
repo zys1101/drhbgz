@@ -101,7 +101,6 @@ export default {
       this.loading = true
       this.errorMsg = ''
       try {
-        // TODO: 后端就绪后替换为真实登录接口
         const user = await login(this.account, this.password, this.role)
         this.$store.dispatch('login', user)
         const redirect = this.$route.query.redirect

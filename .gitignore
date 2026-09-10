@@ -1,3 +1,14 @@
 backend/.idea
 
 .vscode
+# 预览服务运行时数据库
+preview/nep_preview.db
+
+# 前端构建产物与依赖
+front/dist/
+front/node_modules/
+
+# IDE / 日志
+*.iml
+.idea/
+*.log
