@@ -1,0 +1,16 @@
+server:
+  port: 9000
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+#数据库的链接配置
+spring:
+  datasource:
+    driver-class-name:  com.mysql.cj.jdbc.Driver #数据库驱动
+    url: jdbc:mysql://localhost:3306/test?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&allowMultiQueries=true&useSSL=false&allowPublicKeyRetrieval=true&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&tinyInt1isBit=false&allowPublicKeyRetrieval=true&useInformationSchema=true&allowMultiQueries=true&useUnicode=true&characterEncoding=utf-8&allowMultiQueries=true&useSSL=false&allowPublicKeyRet
+    username: root
+    password: As.123456  #这个你们一定要改成自己的

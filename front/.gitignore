@@ -1,0 +1,14 @@
+dist
+node_modules
+
+# 编辑器 / IDE / 系统文件
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
