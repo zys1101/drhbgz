@@ -1,140 +1,173 @@
 <template>
-  <div class="page">
-    <transition name="toast">
-      <div v-if="toast.show" class="toast" :class="toast.type">
-        <span class="toast-msg">{{ toast.message }}</span>
-      </div>
-    </transition>
-
-    <div class="card">
-      <div class="card-header">
+  <div class="nep-page">
+    <div class="nep-card">
+      <div class="nep-card-header">
         <div>
-          <h2 class="card-title">确认AQI数据管理</h2>
-          <p class="card-sub">浏览网格员提交的实测AQI数据，确认后纳入统计；异常数据可退回重新检测</p>
+          <h2 class="nep-card-title">
+            <span class="nep-title-icon"><i class="fa-solid fa-flask-vial"></i></span>
+            确认 AQI 数据列表
+          </h2>
+          <p class="nep-card-sub">
+            浏览网格员提交的实测AQI数据，确认无误后纳入统计（AQI = MAX(SO2, CO, PM2.5)）
+            <el-tag v-if="mock" type="warning" size="small" effect="plain" style="margin-left:8px">演示数据</el-tag>
+          </p>
         </div>
-        <span v-if="mock" class="mock-badge">演示数据（后端未连接）</span>
+        <el-button :icon="Refresh" circle @click="fetchList" />
       </div>
 
       <!-- 查询条件 -->
       <div class="filter-bar">
-        <input v-model.trim="filters.keyword" class="filter-input" placeholder="地区 / 地址 / 网格员">
-        <select v-model="filters.grade" class="filter-input">
-          <option value="">全部AQI等级</option>
-          <option v-for="g in gradeOptions" :key="g.value" :value="g.value">{{ g.label }}</option>
-        </select>
-        <select v-model="filters.state" class="filter-input">
-          <option value="">全部状态</option>
-          <option :value="0">待确认</option>
-          <option :value="1">已确认</option>
-          <option :value="2">已退回</option>
-        </select>
-        <button class="btn-filter" @click="applyFilter">查询</button>
-        <button class="btn-filter reset" @click="resetFilter">重置</button>
+        <el-input v-model="filters.keyword" placeholder="地区 / 地址 / 网格员编号" clearable class="f-kw"
+          @keyup.enter="applyFilter">
+          <template #prefix><i class="fa-solid fa-magnifying-glass"></i></template>
+        </el-input>
+        <el-select v-model="filters.grade" placeholder="AQI等级" clearable class="f-sm">
+          <el-option v-for="g in gradeOptions" :key="g.value" :value="g.value" :label="g.label" />
+        </el-select>
+        <el-select v-model="filters.state" placeholder="状态" clearable class="f-sm">
+          <el-option label="待确认" :value="0" />
+          <el-option label="已确认" :value="1" />
+          <el-option label="已退回" :value="2" />
+        </el-select>
+        <el-button type="primary" class="nep-btn-gradient" @click="applyFilter">
+          <i class="fa-solid fa-magnifying-glass" style="margin-right:4px"></i>查询
+        </el-button>
+        <el-button @click="resetFilter">
+          <i class="fa-solid fa-rotate-left" style="margin-right:4px"></i>重置
+        </el-button>
       </div>
 
-      <div v-if="loading" class="loading-wrap">
-        <div class="spinner"></div>
-        <span class="loading-text">数据加载中...</span>
-      </div>
+      <div class="nep-table-wrap">
+        <el-table v-loading="loading" :data="pagedList" style="width: 100%"
+          :header-cell-style="{ background: '#f8faf9' }">
+          <el-table-column prop="dataId" label="数据编号" width="86" />
+          <el-table-column label="网格区域" min-width="150">
+            <template #default="{ row }">
+              <span class="region"><i class="fa-solid fa-location-dot region-icon"></i>
+                {{ row.provinceName }} · {{ row.cityName }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="SO₂" width="80" align="center">
+            <template #default="{ row }">
+              <span class="p-grade" :style="{ color: pColor(row.so2Grade) }">{{ pShort(row.so2Grade) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="CO" width="80" align="center">
+            <template #default="{ row }">
+              <span class="p-grade" :style="{ color: pColor(row.coGrade) }">{{ pShort(row.coGrade) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="PM2.5" width="80" align="center">
+            <template #default="{ row }">
+              <span class="p-grade" :style="{ color: pColor(row.pm25Grade) }">{{ pShort(row.pm25Grade) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="AQI等级" width="125" align="center">
+            <template #default="{ row }">
+              <GradeTag :grade="row.aqiGrade" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="gridCode" label="检测网格员" width="105">
+            <template #default="{ row }">
+              <span class="muted">{{ row.gridCode }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="提交时间" width="165">
+            <template #default="{ row }">
+              <span class="muted">{{ row.submitDate }} {{ row.submitTime }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="92" align="center">
+            <template #default="{ row }">
+              <span class="data-state" :class="'d' + row.state">{{ dataStateText(row.state) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="165" align="center" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="showDetail(row)">详情</el-button>
+              <template v-if="row.state === 0">
+                <el-button link type="success" size="small" :loading="confirming" @click="confirmData(row)">确认</el-button>
+                <el-button link type="danger" size="small" @click="handleReject(row)">退回</el-button>
+              </template>
+            </template>
+          </el-table-column>
+          <template #empty>
+            <div class="nep-empty" style="padding:40px">
+              <span class="nep-empty-icon"><i class="fa-regular fa-folder-open"></i></span>
+              <span>暂无数据</span>
+            </div>
+          </template>
+        </el-table>
 
-      <div v-else class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th width="110">数据编号</th>
-              <th>省份</th>
-              <th>城市</th>
-              <th>地址</th>
-              <th>SO₂</th>
-              <th>CO</th>
-              <th>PM2.5</th>
-              <th>最终AQI等级</th>
-              <th>网格员</th>
-              <th>提交时间</th>
-              <th>状态</th>
-              <th width="170">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in filteredList" :key="item.dataId">
-              <td class="cell-id">{{ item.dataId }}</td>
-              <td>{{ item.provinceName }}</td>
-              <td>{{ item.cityName }}</td>
-              <td class="cell-ellipsis" :title="item.address">{{ item.address }}</td>
-              <td><span class="mini-tag" :class="'g' + item.so2Grade">{{ item.so2Grade }}级</span></td>
-              <td><span class="mini-tag" :class="'g' + item.coGrade">{{ item.coGrade }}级</span></td>
-              <td><span class="mini-tag" :class="'g' + item.pm25Grade">{{ item.pm25Grade }}级</span></td>
-              <td>
-                <span class="grade-tag" :class="'grade-' + item.aqiGrade">{{ gradeText(item.aqiGrade) }}</span>
-              </td>
-              <td>{{ item.gridCode }}</td>
-              <td class="cell-nowrap">{{ item.submitTime }}</td>
-              <td>
-                <span class="state-tag" :class="'st-' + item.state">
-                  {{ item.state === 0 ? '待确认' : item.state === 1 ? '已确认' : '已退回' }}
-                </span>
-              </td>
-              <td>
-                <div class="action-buttons">
-                  <button class="btn-text btn-detail" @click="showDetail(item)">详情</button>
-                  <button v-if="item.state === 0" class="btn-text btn-ok" @click="confirmData(item)">确认</button>
-                  <button v-if="item.state === 0" class="btn-text btn-danger" @click="handleReject(item)">退回</button>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="filteredList.length === 0">
-              <td colspan="12" class="empty-cell">
-                <span class="empty-icon">📭</span>
-                <span>暂无符合条件的数据</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="pager">
+          <el-pagination v-model:current-page="page.current" v-model:page-size="page.size"
+            :total="filteredList.length" :page-sizes="[10, 20, 50]" background
+            layout="total, sizes, prev, pager, next" />
+        </div>
       </div>
     </div>
 
     <!-- 详情弹窗 -->
-    <div v-if="detail" class="dialog-mask" @click.self="detail = null">
-      <div class="dialog">
-        <div class="dialog-header">
-          <h3>实测AQI数据详情</h3>
-          <button class="dialog-close" @click="detail = null">✕</button>
-        </div>
-        <div class="dialog-body">
-          <div class="detail-row"><span class="detail-label">数据编号</span><span>{{ detail.dataId }}</span></div>
-          <div class="detail-row"><span class="detail-label">关联反馈</span><span>#{{ detail.afId }}</span></div>
-          <div class="detail-row"><span class="detail-label">网格区域</span><span>{{ detail.provinceName }} · {{ detail.cityName }}</span></div>
-          <div class="detail-row"><span class="detail-label">具体地址</span><span>{{ detail.address }}</span></div>
-          <div class="detail-row"><span class="detail-label">SO₂等级</span><span>{{ gradeText(detail.so2Grade) }}</span></div>
-          <div class="detail-row"><span class="detail-label">CO等级</span><span>{{ gradeText(detail.coGrade) }}</span></div>
-          <div class="detail-row"><span class="detail-label">PM2.5等级</span><span>{{ gradeText(detail.pm25Grade) }}</span></div>
-          <div class="detail-row"><span class="detail-label">最终AQI等级</span><span>{{ gradeText(detail.aqiGrade) }}（AQI = MAX 三项取最大）</span></div>
-          <div class="detail-row"><span class="detail-label">检测网格员</span><span>{{ detail.gridCode }}</span></div>
-          <div class="detail-row"><span class="detail-label">提交时间</span><span>{{ detail.submitTime }}</span></div>
-          <div class="detail-row"><span class="detail-label">当前状态</span><span>{{ detail.state === 0 ? '待确认' : detail.state === 1 ? '已确认' : '已退回' }}</span></div>
-        </div>
-      </div>
-    </div>
+    <el-dialog v-model="detailVisible" title="实测 AQI 数据详情" width="620px">
+      <el-descriptions :column="2" border v-if="detail">
+        <el-descriptions-item label="数据编号">{{ detail.dataId }}</el-descriptions-item>
+        <el-descriptions-item label="对应反馈编号">{{ detail.afId }}</el-descriptions-item>
+        <el-descriptions-item label="网格区域" :span="2">
+          {{ detail.provinceName }} · {{ detail.cityName }}（{{ detail.address }}）
+        </el-descriptions-item>
+        <el-descriptions-item label="SO₂ 二氧化硫">
+          <span :style="{ color: pColor(detail.so2Grade), fontWeight: 600 }">{{ gradeText(detail.so2Grade) }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="CO 一氧化碳">
+          <span :style="{ color: pColor(detail.coGrade), fontWeight: 600 }">{{ gradeText(detail.coGrade) }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="PM2.5 悬浮颗粒物">
+          <span :style="{ color: pColor(detail.pm25Grade), fontWeight: 600 }">{{ gradeText(detail.pm25Grade) }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="最终 AQI 等级">
+          <GradeTag :grade="detail.aqiGrade" />
+        </el-descriptions-item>
+        <el-descriptions-item label="检测网格员">{{ detail.gridCode }}</el-descriptions-item>
+        <el-descriptions-item label="提交时间">{{ detail.submitDate }} {{ detail.submitTime }}</el-descriptions-item>
+        <el-descriptions-item label="当前状态" :span="2">
+          <span class="data-state" :class="'d' + detail.state">{{ dataStateText(detail.state) }}</span>
+        </el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button v-if="detail && detail.state === 0" type="primary" class="nep-btn-gradient"
+          @click="detailVisible = false; confirmData(detail)">确认纳入统计</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { getAqiDataList, rejectAqiData } from '../../api/task'
+import { Refresh } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import GradeTag from '../../components/GradeTag.vue'
+import { getAqiDataList, rejectAqiData, confirmAqiData } from '../../api/task'
 import { AQI_GRADES, gradeText } from '../../constants/aqi'
+
+const P_COLORS = ['', '#16a34a', '#65a30d', '#d97706', '#dc2626', '#be123c', '#7f1d1d']
+const P_SHORTS = ['', '优', '良', '轻度', '中度', '重度', '严重']
 
 export default {
   name: 'AqiDataView',
+  components: { GradeTag },
   data() {
     return {
+      Refresh,
       list: [],
       loading: true,
       mock: false,
+      confirming: false,
       filters: { keyword: '', grade: '', state: '' },
       applied: null,
+      page: { current: 1, size: 10 },
       detail: null,
-      gradeOptions: AQI_GRADES,
-      toast: { show: false, type: 'success', message: '' },
-      toastTimer: null
+      detailVisible: false,
+      gradeOptions: AQI_GRADES
     }
   },
   computed: {
@@ -149,6 +182,10 @@ export default {
         if (f.state !== '' && item.state !== Number(f.state)) return false
         return true
       })
+    },
+    pagedList() {
+      const start = (this.page.current - 1) * this.page.size
+      return this.filteredList.slice(start, start + this.page.size)
     }
   },
   created() {
@@ -156,10 +193,14 @@ export default {
   },
   methods: {
     gradeText,
-    showToast(type, message) {
-      this.toast = { show: true, type, message }
-      if (this.toastTimer) clearTimeout(this.toastTimer)
-      this.toastTimer = setTimeout(() => { this.toast.show = false }, 2500)
+    pColor(g) {
+      return P_COLORS[g] || '#94a3b8'
+    },
+    pShort(g) {
+      return P_SHORTS[g] || '未知'
+    },
+    dataStateText(s) {
+      return { 0: '待确认', 1: '已确认', 2: '已退回' }[s] || '未知'
     },
     async fetchList() {
       this.loading = true
@@ -173,334 +214,114 @@ export default {
     },
     applyFilter() {
       this.applied = { ...this.filters }
+      this.page.current = 1
     },
     resetFilter() {
       this.filters = { keyword: '', grade: '', state: '' }
       this.applied = null
+      this.page.current = 1
     },
     showDetail(item) {
       this.detail = item
+      this.detailVisible = true
     },
     confirmData(item) {
-      item.state = 1
-      this.showToast('success', '数据已确认，纳入统计范围')
+      this.confirming = true
+      confirmAqiData(item.dataId)
+        .then(res => {
+          item.state = 1
+          ElMessage.success('数据已确认' + (res.mock ? '（演示数据）' : '') + '，纳入统计范围')
+        })
+        .catch(err => {
+          ElMessage.error((err && err.message) || '确认失败，请重试')
+        })
+        .finally(() => { this.confirming = false })
     },
-    async handleReject(item) {
-      if (!confirm('退回后该任务将重新变为待指派，需要重新指派检测。确定退回吗？')) return
-      await rejectAqiData(item.dataId)
-      item.state = 2
-      this.showToast('success', '已退回，任务重新进入待指派状态')
+    handleReject(item) {
+      ElMessageBox.confirm(
+        '退回后该任务将重新变为待指派，需要重新指派检测。确定退回吗？',
+        '退回确认',
+        { confirmButtonText: '退回', cancelButtonText: '取消', type: 'warning' }
+      )
+        .then(async () => {
+          try {
+            const res = await rejectAqiData(item.dataId)
+            item.state = 2
+            ElMessage.success('已退回' + (res.mock ? '（演示数据）' : '') + '，任务重新进入待指派状态')
+          } catch (err) {
+            ElMessage.error((err && err.message) || '退回失败，请重试')
+          }
+        })
+        .catch(() => {})
     }
   }
 }
 </script>
 
 <style scoped>
-.page {
-  padding: 28px 32px;
-  text-align: left;
-}
-
-.card {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  overflow: hidden;
-}
-
-.card-header {
-  padding: 22px 28px;
-  border-bottom: 1px solid #ebeef5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.card-title {
-  margin: 0;
-  font-size: 19px;
-  color: #2c3e50;
-}
-
-.card-sub {
-  margin: 5px 0 0;
-  font-size: 13px;
-  color: #a8abb2;
-}
-
-.mock-badge {
-  font-size: 12px;
-  color: #e6a23c;
-  background: #fdf6ec;
-  border: 1px solid #faecd8;
-  padding: 4px 12px;
-  border-radius: 12px;
-}
-
 .filter-bar {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
-  padding: 16px 28px;
-  border-bottom: 1px solid #ebeef5;
-  background: #fafbfc;
+  flex-wrap: wrap;
+  padding: 16px 22px 4px;
 }
 
-.filter-input {
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
+.f-kw {
+  width: 280px;
+}
+
+.f-sm {
+  width: 150px;
+}
+
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 12px 6px;
+}
+
+.region {
   font-size: 13px;
-  outline: none;
-  min-width: 140px;
-  background: #fff;
-  color: #303133;
-}
-
-.filter-input:focus {
-  border-color: #42b983;
-}
-
-.btn-filter {
-  height: 34px;
-  padding: 0 18px;
-  border: none;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #42b983, #2e8565);
-  color: #fff;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.btn-filter.reset {
-  background: #fff;
-  color: #606266;
-  border: 1px solid #dcdfe6;
-}
-
-.table-wrap {
-  overflow-x: auto;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.data-table th,
-.data-table td {
-  padding: 12px 14px;
-  text-align: left;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.data-table th {
-  background: #fafbfc;
-  color: #909399;
+  color: #334155;
   font-weight: 600;
-  white-space: nowrap;
 }
 
-.data-table tbody tr:hover {
-  background: #f4faf7;
-}
-
-.cell-id {
-  color: #909399;
-  font-family: monospace;
+.region-icon {
+  color: #10b981;
+  margin-right: 4px;
   font-size: 12px;
 }
 
-.cell-nowrap {
-  white-space: nowrap;
+.muted {
+  color: #94a3b8;
+  font-size: 13px;
 }
 
-.cell-ellipsis {
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.p-grade {
+  font-weight: 700;
+  font-size: 13px;
 }
 
-.mini-tag {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 8px;
+.data-state {
   font-size: 12px;
-}
-
-.mini-tag.g1 { background: #95e8a7; color: #1a6b32; }
-.mini-tag.g2 { background: #e1f3d8; color: #529b2e; }
-.mini-tag.g3 { background: #faecd8; color: #b88230; }
-.mini-tag.g4 { background: #fde2e2; color: #c45656; }
-.mini-tag.g5 { background: #f89898; color: #fff; }
-.mini-tag.g6 { background: #7b4a12; color: #fff; }
-
-.grade-tag {
-  display: inline-block;
+  font-weight: 600;
+  border-radius: 999px;
   padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
 }
 
-.grade-tag.grade-1 { background: #95e8a7; color: #1a6b32; }
-.grade-tag.grade-2 { background: #e1f3d8; color: #529b2e; }
-.grade-tag.grade-3 { background: #faecd8; color: #b88230; }
-.grade-tag.grade-4 { background: #fde2e2; color: #c45656; }
-.grade-tag.grade-5 { background: #f89898; color: #fff; }
-.grade-tag.grade-6 { background: #7b4a12; color: #fff; }
-
-.state-tag.st-0 { color: #e6a23c; font-weight: 600; }
-.state-tag.st-1 { color: #67c23a; font-weight: 600; }
-.state-tag.st-2 { color: #f56c6c; }
-
-.action-buttons {
-  display: flex;
-  gap: 6px;
+.data-state.d0 {
+  color: #7c3aed;
+  background: #f5f3ff;
 }
 
-.btn-text {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 10px;
-  font-size: 12px;
-  border-radius: 6px;
-  transition: all 0.2s;
-  white-space: nowrap;
+.data-state.d1 {
+  color: #047857;
+  background: #ecfdf5;
 }
 
-.btn-detail { color: #606266; background: #f4f4f5; }
-.btn-detail:hover { background: #e9e9eb; }
-
-.btn-ok { color: #67c23a; background: #f0f9eb; }
-.btn-ok:hover { background: #e1f3d8; }
-
-.btn-danger { color: #f56c6c; background: #fef0f0; }
-.btn-danger:hover { background: #fde2e2; }
-
-.empty-cell {
-  text-align: center !important;
-  padding: 60px 0 !important;
+.data-state.d2 {
+  color: #b45309;
+  background: #fffbeb;
 }
-
-.empty-cell > span {
-  display: block;
-  color: #c0c4cc;
-  font-size: 14px;
-}
-
-.empty-icon {
-  font-size: 34px;
-  margin-bottom: 8px;
-}
-
-.dialog-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.dialog {
-  width: 540px;
-  max-width: 92%;
-  max-height: 86vh;
-  overflow-y: auto;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-}
-
-.dialog-header {
-  padding: 18px 22px;
-  border-bottom: 1px solid #ebeef5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.dialog-header h3 {
-  margin: 0;
-  font-size: 16px;
-  color: #2c3e50;
-}
-
-.dialog-close {
-  background: none;
-  border: none;
-  font-size: 16px;
-  color: #909399;
-  cursor: pointer;
-}
-
-.dialog-body {
-  padding: 20px 22px;
-}
-
-.detail-row {
-  display: flex;
-  margin-bottom: 12px;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.detail-label {
-  width: 90px;
-  flex-shrink: 0;
-  color: #909399;
-}
-
-.loading-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80px 20px;
-  gap: 16px;
-}
-
-.spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid #e4e7ed;
-  border-top-color: #42b983;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.loading-text {
-  color: #909399;
-  font-size: 14px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.toast {
-  position: fixed;
-  top: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 22px;
-  border-radius: 8px;
-  font-size: 14px;
-  z-index: 9999;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-  white-space: nowrap;
-}
-
-.toast.success { background: #f0f9eb; color: #67c23a; border: 1px solid #e1f3d8; }
-.toast.error   { background: #fef0f0; color: #f56c6c; border: 1px solid #fde2e2; }
-.toast.warning { background: #fdf6ec; color: #e6a23c; border: 1px solid #faecd8; }
-
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, -20px); }
 </style>

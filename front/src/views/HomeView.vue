@@ -1,99 +1,101 @@
 <template>
-  <div class="dashboard">
-    <section class="hero">
-      <div class="hero-text">
-        <h1>欢迎回来，{{ username }} 👋</h1>
-        <p>这里是空气质量监测系统的总览看板，随时掌握反馈处理进展与 AQI 级别定义。</p>
+  <div class="nep-page dashboard">
+    <!-- 欢迎横幅 -->
+    <section class="hero nep-card">
+      <div class="hero-main">
+        <h2>{{ greeting }}，{{ username }}</h2>
+        <p>这里是系统运行总览看板，随时掌握公众反馈处理进展与全国 AQI 检测情况。</p>
         <div class="hero-actions">
-          <button class="btn btn-primary" @click="$router.push('/admin/feedback')">📝 前往反馈管理</button>
-          <button class="btn btn-ghost" @click="$router.push('/aqi')">📊 查看级别定义</button>
+          <el-button type="primary" class="nep-btn-gradient" @click="$router.push('/admin/feedback')">
+            <i class="fa-solid fa-inbox" style="margin-right:6px"></i>反馈管理
+          </el-button>
+          <el-button @click="$router.push('/admin/stats')">
+            <i class="fa-solid fa-chart-column" style="margin-right:6px"></i>统计报表
+          </el-button>
         </div>
       </div>
-      <div class="hero-badge">
-        <span class="hero-badge-icon">🌍</span>
-        <span>守护每一口<br>新鲜空气</span>
-      </div>
+      <div class="hero-art"><i class="fa-solid fa-earth-asia"></i></div>
     </section>
 
-    <section class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-icon" style="background: #e8f7f0; color: #42b983;">📝</div>
-        <div class="stat-info">
-          <span class="stat-value">{{ statText(feedbackTotal) }}</span>
-          <span class="stat-label">反馈总数</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: #fdf6ec; color: #e6a23c;">⏳</div>
-        <div class="stat-info">
-          <span class="stat-value">{{ statText(pendingTotal) }}</span>
-          <span class="stat-label">待处理反馈</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: #ecf5ff; color: #409eff;">✅</div>
-        <div class="stat-info">
-          <span class="stat-value">{{ statText(doneTotal) }}</span>
-          <span class="stat-label">已处理反馈</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: #f4f0ff; color: #764ba2;">📊</div>
-        <div class="stat-info">
-          <span class="stat-value">{{ statText(aqiTotal) }}</span>
-          <span class="stat-label">已定义级别</span>
-        </div>
-      </div>
+    <!-- KPI 指标 -->
+    <section class="kpi-grid">
+      <StatCard icon="fa-solid fa-inbox" label="反馈总数" :value="statText(feedbackTotal)"
+        color="#10b981" deco="fa-solid fa-inbox" />
+      <StatCard icon="fa-solid fa-hourglass-half" label="待处理反馈" :value="statText(pendingTotal)"
+        color="#f59e0b" deco="fa-solid fa-hourglass-half" />
+      <StatCard icon="fa-solid fa-circle-check" label="已确认完成" :value="statText(doneTotal)"
+        color="#6366f1" deco="fa-solid fa-circle-check" />
+      <StatCard icon="fa-solid fa-flask-vial" label="实测AQI数据" :value="statText(dataTotal)"
+        color="#0ea5e9" deco="fa-solid fa-flask-vial" />
     </section>
 
+    <!-- 双面板 -->
     <section class="panel-grid">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>AQI 级别图例</h2>
-          <router-link to="/aqi" class="panel-more">管理 →</router-link>
+      <div class="nep-card">
+        <div class="nep-card-header">
+          <h3 class="nep-card-title"><span class="nep-title-icon"><i class="fa-solid fa-table-cells"></i></span>AQI 级别标准</h3>
+          <el-link type="primary" :underline="false" @click="$router.push('/aqi')">管理 <i class="fa-solid fa-angle-right"></i></el-link>
         </div>
-        <div v-if="aqiLevels.length" class="legend-list">
+        <div class="nep-card-body legend-list">
           <div v-for="item in aqiLevels" :key="item.aqiId" class="legend-item">
             <span class="legend-color" :style="{ background: item.color }"></span>
-            <span class="legend-name">{{ item.chineseExplain }}</span>
-            <span class="legend-desc">{{ item.aqiExplain }}</span>
+            <div class="legend-meta">
+              <span class="legend-name">{{ item.chineseExplain }} · {{ item.aqiExplain }}</span>
+              <span class="legend-range">AQI {{ item.aqiRange }}</span>
+            </div>
           </div>
+          <div v-if="!aqiLevels.length" class="nep-empty-sm">{{ backendTip }}</div>
         </div>
-        <div v-else class="panel-empty">{{ backendTip }}</div>
       </div>
 
-      <div class="panel">
-        <div class="panel-header">
-          <h2>最新反馈</h2>
-          <router-link to="/admin/feedback" class="panel-more">更多 →</router-link>
+      <div class="nep-card">
+        <div class="nep-card-header">
+          <h3 class="nep-card-title"><span class="nep-title-icon"><i class="fa-solid fa-clock-rotate-left"></i></span>最新反馈</h3>
+          <el-link type="primary" :underline="false" @click="$router.push('/admin/feedback')">更多 <i class="fa-solid fa-angle-right"></i></el-link>
         </div>
-        <div v-if="recentFeedback.length" class="feed-list">
-          <div v-for="item in recentFeedback" :key="item.afId" class="feed-item">
-            <div class="feed-main">
-              <span class="feed-title">{{ item.provinceName || '省份' + item.provinceId }} · {{ item.cityName || '城市' + item.cityId }}</span>
-              <span class="feed-sub">{{ item.afDate }} {{ item.afTime }}</span>
-            </div>
-            <span class="feed-tag" :class="'grade-' + item.estimatedGrade">{{ gradeText(item.estimatedGrade) }}</span>
-          </div>
+        <div class="nep-table-wrap">
+          <el-table :data="recentFeedback" style="width: 100%" :header-cell-style="{ background: '#f8faf9' }">
+            <el-table-column label="网格区域" min-width="150">
+              <template #default="{ row }">
+                <span class="region">{{ row.provinceName || row.provinceId }} · {{ row.cityName || row.cityId }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="afDate" label="反馈时间" width="100" />
+            <el-table-column label="预估等级" width="120" align="center">
+              <template #default="{ row }">
+                <GradeTag :grade="row.estimatedGrade" />
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="90" align="center">
+              <template #default="{ row }">
+                <StateTag :state="row.state" />
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="!recentFeedback.length" class="nep-empty-sm">{{ backendTip }}</div>
         </div>
-        <div v-else class="panel-empty">{{ backendTip }}</div>
       </div>
     </section>
   </div>
 </template>
 
 <script>
+import StatCard from '../components/StatCard.vue'
+import GradeTag from '../components/GradeTag.vue'
+import StateTag from '../components/StateTag.vue'
 import { getAqiFeedbackList } from '../api/aqiFeedback.js'
 import { getAqiList } from '../api/aqi.js'
+import { getAqiDataList } from '../api/task.js'
 
 export default {
   name: 'HomeView',
+  components: { StatCard, GradeTag, StateTag },
   data() {
     return {
       feedbackTotal: null,
       pendingTotal: null,
       doneTotal: null,
-      aqiTotal: null,
+      dataTotal: null,
       aqiLevels: [],
       recentFeedback: []
     }
@@ -102,8 +104,17 @@ export default {
     username() {
       return this.$store.state.user ? this.$store.state.user.username : ''
     },
+    greeting() {
+      const h = new Date().getHours()
+      if (h < 6) return '夜深了'
+      if (h < 9) return '早上好'
+      if (h < 12) return '上午好'
+      if (h < 14) return '中午好'
+      if (h < 18) return '下午好'
+      return '晚上好'
+    },
     backendTip() {
-      return this.feedbackTotal === null && this.aqiTotal === null
+      return this.feedbackTotal === null && this.aqiTotalNull()
         ? '暂无数据（后端服务未连接时会显示此提示）'
         : '暂无数据'
     }
@@ -112,19 +123,17 @@ export default {
     this.loadData()
   },
   methods: {
+    aqiTotalNull() {
+      return !this.aqiLevels.length
+    },
     statText(v) {
       return v === null ? '—' : v
     },
-    gradeText(grade) {
-      const map = {
-        0: '未评级', 1: '一级', 2: '二级', 3: '三级',
-        4: '四级', 5: '五级', 6: '六级'
-      }
-      return map[grade] || '未知'
-    },
     async loadData() {
       try {
-        const [fbRes, aqiRes] = await Promise.allSettled([getAqiFeedbackList(), getAqiList()])
+        const [fbRes, aqiRes, dataRes] = await Promise.allSettled([
+          getAqiFeedbackList(), getAqiList(), getAqiDataList()
+        ])
         if (fbRes.status === 'fulfilled' && fbRes.value.data.code === 200) {
           const list = fbRes.value.data.data || []
           this.feedbackTotal = list.length
@@ -133,9 +142,10 @@ export default {
           this.recentFeedback = list.slice(0, 6)
         }
         if (aqiRes.status === 'fulfilled' && aqiRes.value.data.code === 200) {
-          const list = aqiRes.value.data.data || []
-          this.aqiTotal = list.length
-          this.aqiLevels = list
+          this.aqiLevels = aqiRes.value.data.data || []
+        }
+        if (dataRes.status === 'fulfilled' && dataRes.value.list) {
+          this.dataTotal = dataRes.value.list.length
         }
       } catch (err) {
         // 后端未启动时静默降级，页面显示占位文案
@@ -147,275 +157,113 @@ export default {
 </script>
 
 <style scoped>
-.dashboard {
-  padding: 28px 32px;
-  text-align: left;
-}
-
-/* ---------- 欢迎横幅 ---------- */
+/* ---------------- 欢迎横幅 ---------------- */
 .hero {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  background: linear-gradient(135deg, #42b983 0%, #2c3e50 100%);
-  border-radius: 16px;
-  padding: 34px 38px;
-  color: #fff;
-  margin-bottom: 24px;
-  box-shadow: 0 12px 32px rgba(44, 62, 80, 0.25);
+  padding: 26px 30px;
+  margin-bottom: 18px;
+  background:
+    radial-gradient(420px 200px at 92% 0%, rgba(16, 185, 129, 0.12), transparent 60%),
+    linear-gradient(120deg, #ffffff 55%, #ecfdf5 100%);
 }
 
-.hero-text h1 {
-  margin: 0 0 8px;
-  font-size: 24px;
+.hero-main h2 {
+  margin: 0;
+  font-size: 21px;
+  color: #0f172a;
 }
 
-.hero-text p {
-  margin: 0 0 20px;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 14px;
+.hero-main p {
+  margin: 8px 0 16px;
+  color: #64748b;
+  font-size: 13.5px;
 }
 
-.hero-actions {
-  display: flex;
-  gap: 12px;
+.hero-art {
+  font-size: 96px;
+  color: #10b981;
+  opacity: 0.16;
+  padding-right: 20px;
 }
 
-.hero-badge {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 14px;
-  padding: 16px 20px;
-  font-size: 14px;
-  line-height: 1.5;
-  white-space: nowrap;
-}
-
-.hero-badge-icon {
-  font-size: 34px;
-}
-
-/* ---------- 按钮 ---------- */
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-primary {
-  background: #fff;
-  color: #2c7a5a;
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
-}
-
-.btn-ghost {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-}
-
-.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.24);
-}
-
-/* ---------- 统计卡片 ---------- */
-.stat-grid {
+/* ---------------- KPI ---------------- */
+.kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 18px;
-  margin-bottom: 24px;
-}
-
-.stat-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  align-items: center;
   gap: 16px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  transition: transform 0.2s, box-shadow 0.2s;
+  margin-bottom: 18px;
 }
 
-.stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  flex-shrink: 0;
-}
-
-.stat-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-value {
-  font-size: 26px;
-  font-weight: 700;
-  color: #2c3e50;
-  line-height: 1.2;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: #909399;
-}
-
-/* ---------- 面板 ---------- */
+/* ---------------- 双面板 ---------------- */
 .panel-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
+  grid-template-columns: 5fr 7fr;
+  gap: 16px;
+  align-items: start;
 }
 
-.panel {
-  background: #fff;
-  border-radius: 12px;
-  padding: 22px 24px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.panel-header h2 {
-  margin: 0;
-  font-size: 16px;
-  color: #2c3e50;
-}
-
-.panel-more {
-  font-size: 13px;
-  color: #42b983;
-  text-decoration: none;
-}
-
-.panel-more:hover {
-  text-decoration: underline;
-}
-
-.panel-empty {
-  padding: 40px 0;
-  text-align: center;
-  color: #c0c4cc;
-  font-size: 14px;
-}
-
-/* 级别图例 */
 .legend-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 12px;
-  border-radius: 8px;
-  background: #fafbfc;
+  padding: 10px 12px;
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+
+.legend-item:hover {
+  background: #f8faf9;
 }
 
 .legend-color {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   border-radius: 5px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.legend-meta {
+  display: flex;
+  flex-direction: column;
 }
 
 .legend-name {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
-  color: #303133;
-  min-width: 48px;
+  color: #334155;
 }
 
-.legend-desc {
+.legend-range {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.region {
   font-size: 13px;
-  color: #909399;
+  color: #334155;
 }
 
-/* 最新反馈 */
-.feed-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.nep-empty-sm {
+  padding: 34px 10px;
+  text-align: center;
+  color: #b6c2c7;
+  font-size: 13px;
 }
-
-.feed-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #fafbfc;
-}
-
-.feed-main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.feed-title {
-  font-size: 14px;
-  color: #303133;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.feed-sub {
-  font-size: 12px;
-  color: #a8abb2;
-}
-
-.feed-tag {
-  flex-shrink: 0;
-  font-size: 12px;
-  padding: 3px 10px;
-  border-radius: 12px;
-  background: #e1f3d8;
-  color: #67c23a;
-}
-
-.feed-tag.grade-0 { background: #f4f4f5; color: #909399; }
-.feed-tag.grade-4 { background: #fdf6ec; color: #e6a23c; }
-.feed-tag.grade-5,
-.feed-tag.grade-6 { background: #fef0f0; color: #f56c6c; }
 
 @media (max-width: 1100px) {
-  .stat-grid {
+  .kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .panel-grid {
     grid-template-columns: 1fr;
   }

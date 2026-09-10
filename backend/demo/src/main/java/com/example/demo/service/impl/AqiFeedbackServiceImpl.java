@@ -9,16 +9,20 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * <p>
- *  服务实现类
- * </p>
- *
- * @author laohan
- * @since 2026-09-03
+ * 空气质量公众监督反馈信息 服务实现类
  */
 @Service
 public class AqiFeedbackServiceImpl extends ServiceImpl<AqiFeedbackMapper, AqiFeedback> implements IAqiFeedbackService {
-    public List<AqiFeedback> findAll(){
+
+    @Override
+    public List<AqiFeedback> findAll() {
         return baseMapper.findAll();
+    }
+
+    @Override
+    public List<AqiFeedback> findByCond(String telId, Integer provinceId, Integer cityId,
+                                        Integer grade, Integer state, String dateFrom,
+                                        String dateTo, String keyword) {
+        return baseMapper.selectByCond(telId, provinceId, cityId, grade, state, dateFrom, dateTo, keyword);
     }
 }

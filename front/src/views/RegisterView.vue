@@ -1,178 +1,241 @@
 <template>
-  <div class="register-page">
-    <div class="register-card">
-      <button class="back-btn" @click="$router.push('/login')">&larr; 返回登录</button>
-      <h2 class="register-title">公众监督员注册</h2>
-      <p class="register-subtitle">注册后即可提交空气质量监督信息</p>
+  <div class="auth-page">
+    <!-- 左侧品牌区 -->
+    <div class="brand-panel">
+      <div class="brand-top">
+        <div class="brand-logo"><i class="fa-solid fa-leaf"></i></div>
+        <div class="brand-name">东软环保公众监督系统</div>
+      </div>
+      <h1 class="brand-slogan">人人都是<br />环境监督员</h1>
+      <p class="brand-desc">注册成为公众监督员，随手反馈身边的空气质量，共同守护蓝天。</p>
+      <div class="feature-grid">
+        <div class="feature"><i class="fa-solid fa-mobile-screen"></i><span>手机号一键注册</span></div>
+        <div class="feature"><i class="fa-solid fa-location-dot"></i><span>网格化地址绑定</span></div>
+        <div class="feature"><i class="fa-solid fa-cloud-sun"></i><span>空气质量预估反馈</span></div>
+        <div class="feature"><i class="fa-solid fa-clock-rotate-left"></i><span>历史反馈随时查</span></div>
+      </div>
+      <div class="brand-foot">Copyright © Neusoft Educational · 东软教育</div>
+    </div>
 
-      <form @submit.prevent="handleSubmit" class="register-form">
-        <div class="form-item">
-          <label class="form-label">手机号 <span class="required">*</span></label>
-          <input
-            type="text"
-            v-model.trim="form.telId"
-            class="form-input"
-            :class="{ 'has-error': errors.telId }"
-            placeholder="请输入11位手机号（作为唯一身份识别）"
-            maxlength="11"
-          >
-          <span v-if="errors.telId" class="error-msg">{{ errors.telId }}</span>
-        </div>
+    <!-- 右侧注册表单 -->
+    <div class="form-panel">
+      <div class="form-box">
+        <el-button text class="back-btn" @click="$router.push('/login')">
+          <i class="fa-solid fa-arrow-left"></i> 返回登录
+        </el-button>
+        <h2 class="form-title">注册公众监督员</h2>
+        <p class="form-sub">手机号是您的身份唯一识别，请如实填写</p>
 
-        <div class="form-item">
-          <label class="form-label">登录密码 <span class="required">*</span></label>
-          <input
-            type="password"
-            v-model.trim="form.password"
-            class="form-input"
-            :class="{ 'has-error': errors.password }"
-            placeholder="请输入密码（至少6位）"
-          >
-          <span v-if="errors.password" class="error-msg">{{ errors.password }}</span>
-        </div>
-
-        <div class="form-item">
-          <label class="form-label">确认密码 <span class="required">*</span></label>
-          <input
-            type="password"
-            v-model.trim="form.confirmPwd"
-            class="form-input"
-            :class="{ 'has-error': errors.confirmPwd }"
-            placeholder="请再次输入密码"
-          >
-          <span v-if="errors.confirmPwd" class="error-msg">{{ errors.confirmPwd }}</span>
-        </div>
-
-        <div class="form-item">
-          <label class="form-label">真实姓名 <span class="required">*</span></label>
-          <input
-            type="text"
-            v-model.trim="form.realName"
-            class="form-input"
-            :class="{ 'has-error': errors.realName }"
-            placeholder="便于工作人员与您联系"
-            maxlength="20"
-          >
-          <span v-if="errors.realName" class="error-msg">{{ errors.realName }}</span>
-        </div>
-
-        <div class="form-row">
-          <div class="form-item">
-            <label class="form-label">年龄 <span class="required">*</span></label>
-            <input
-              type="number"
-              v-model.number="form.age"
-              class="form-input"
-              :class="{ 'has-error': errors.age }"
-              placeholder="请输入年龄"
-              min="1"
-              max="120"
-            >
-            <span v-if="errors.age" class="error-msg">{{ errors.age }}</span>
+        <el-form ref="formRef" :model="form" :rules="rules" label-position="top" size="large">
+          <el-form-item label="手机号" prop="telId">
+            <el-input v-model.trim="form.telId" maxlength="11" placeholder="请输入11位手机号" clearable>
+              <template #prefix><i class="fa-solid fa-mobile-screen-button"></i></template>
+            </el-input>
+          </el-form-item>
+          <div class="row-2">
+            <el-form-item label="真实姓名" prop="realName">
+              <el-input v-model.trim="form.realName" maxlength="20" placeholder="便于工作人员联系" />
+            </el-form-item>
+            <el-form-item label="年龄" prop="age">
+              <el-input-number v-model="form.age" :min="1" :max="120" style="width: 100%" />
+            </el-form-item>
           </div>
+          <el-form-item label="性别" prop="gender">
+            <el-radio-group v-model="form.gender" class="gender-group">
+              <el-radio-button value="男"><i class="fa-solid fa-mars"></i> 男</el-radio-button>
+              <el-radio-button value="女"><i class="fa-solid fa-venus"></i> 女</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="登录密码" prop="password">
+            <el-input v-model.trim="form.password" type="password" show-password placeholder="至少6位">
+              <template #prefix><i class="fa-solid fa-lock"></i></template>
+            </el-input>
+          </el-form-item>
+          <el-form-item label="确认密码" prop="confirmPwd">
+            <el-input v-model.trim="form.confirmPwd" type="password" show-password placeholder="请再次输入密码">
+              <template #prefix><i class="fa-solid fa-lock"></i></template>
+            </el-input>
+          </el-form-item>
 
-          <div class="form-item">
-            <label class="form-label">性别 <span class="required">*</span></label>
-            <select v-model="form.gender" class="form-input">
-              <option value="男">男</option>
-              <option value="女">女</option>
-            </select>
-          </div>
-        </div>
-
-        <p v-if="errorMsg" class="error-msg form-error">{{ errorMsg }}</p>
-
-        <button type="submit" class="submit-btn" :disabled="loading">
-          {{ loading ? '注册中...' : '注 册' }}
-        </button>
-      </form>
+          <el-button type="primary" size="large" class="nep-btn-gradient register-btn" :loading="loading"
+            @click="handleSubmit">
+            {{ loading ? '注册中...' : '注  册' }}
+          </el-button>
+        </el-form>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
+import { ElMessage } from 'element-plus'
 import { register } from '../api/auth'
 
 export default {
   name: 'RegisterView',
   data() {
+    const validateTel = (rule, value, callback) => {
+      if (!/^1\d{10}$/.test(value || '')) callback(new Error('请输入正确的11位手机号'))
+      else callback()
+    }
     return {
       form: {
         telId: '',
         password: '',
         confirmPwd: '',
         realName: '',
-        age: null,
+        age: 25,
         gender: '男'
       },
-      errors: {},
-      errorMsg: '',
+      rules: {
+        telId: [{ required: true, validator: validateTel, trigger: 'blur' }],
+        realName: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
+        password: [{ required: true, min: 6, message: '密码不能少于6位', trigger: 'blur' }],
+        confirmPwd: [
+          { required: true, message: '请再次输入密码', trigger: 'blur' },
+          {
+            validator: (rule, value, callback) => {
+              if (value !== this.form.password) callback(new Error('两次输入的密码不一致'))
+              else callback()
+            },
+            trigger: 'blur'
+          }
+        ]
+      },
       loading: false
     }
   },
   methods: {
-    validate() {
-      const errors = {}
-      if (!/^1\d{10}$/.test(this.form.telId)) {
-        errors.telId = '请输入正确的11位手机号'
-      }
-      if (!this.form.password || this.form.password.length < 6) {
-        errors.password = '密码不能少于6位'
-      }
-      if (this.form.password !== this.form.confirmPwd) {
-        errors.confirmPwd = '两次输入的密码不一致'
-      }
-      if (!this.form.realName) {
-        errors.realName = '请输入真实姓名'
-      }
-      if (!this.form.age || this.form.age < 1 || this.form.age > 120) {
-        errors.age = '请输入有效年龄'
-      }
-      this.errors = errors
-      return Object.keys(errors).length === 0
-    },
-    async handleSubmit() {
-      if (!this.validate()) return
-      this.loading = true
-      this.errorMsg = ''
-      try {
-        // TODO: 后端就绪后替换为真实注册接口
-        await register({
-          telId: this.form.telId,
-          password: this.form.password,
-          realName: this.form.realName,
-          age: this.form.age,
-          gender: this.form.gender
-        })
-        alert('注册成功，请登录')
-        this.$router.push('/login')
-      } catch (err) {
-        this.errorMsg = err.message || '注册失败'
-      } finally {
-        this.loading = false
-      }
+    handleSubmit() {
+      this.$refs.formRef.validate(async valid => {
+        if (!valid) return
+        this.loading = true
+        try {
+          await register({
+            telId: this.form.telId,
+            password: this.form.password,
+            realName: this.form.realName,
+            age: this.form.age,
+            gender: this.form.gender
+          })
+          ElMessage.success('注册成功，请登录')
+          this.$router.push('/login')
+        } catch (err) {
+          ElMessage.error(err.message || '注册失败')
+        } finally {
+          this.loading = false
+        }
+      })
     }
   }
 }
 </script>
 
 <style scoped>
-.register-page {
+.auth-page {
   min-height: 100vh;
+  display: flex;
+}
+
+.brand-panel {
+  flex: 1.1;
+  min-width: 0;
+  background:
+    radial-gradient(700px 420px at 85% -10%, rgba(52, 211, 153, 0.35), transparent 60%),
+    radial-gradient(600px 400px at -10% 110%, rgba(13, 148, 136, 0.4), transparent 55%),
+    linear-gradient(160deg, #052e22 0%, #064e3b 60%, #065f46 100%);
+  color: #fff;
+  padding: 56px 64px;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #34d399, #059669);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #42b983 0%, #2c3e50 100%);
-  padding: 20px;
+  font-size: 21px;
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5);
 }
 
-.register-card {
-  width: 460px;
+.brand-name {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.brand-slogan {
+  margin: auto 0 0;
+  font-size: 46px;
+  line-height: 1.3;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.brand-desc {
+  margin: 18px 0 0;
+  font-size: 14.5px;
+  color: rgba(255, 255, 255, 0.75);
+  max-width: 430px;
+}
+
+.feature-grid {
+  margin-top: 34px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  max-width: 460px;
+}
+
+.feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 13px;
+}
+
+.feature i {
+  color: #6ee7b7;
+}
+
+.brand-foot {
+  margin-top: auto;
+  padding-top: 40px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ---------------- 表单 ---------------- */
+.form-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f6f4;
+  padding: 40px 24px;
+}
+
+.form-box {
+  width: 470px;
   max-width: 100%;
   background: #fff;
-  border-radius: 12px;
-  padding: 32px 36px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  border-radius: 20px;
+  padding: 36px 40px 30px;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08);
   position: relative;
 }
 
@@ -180,104 +243,51 @@ export default {
   position: absolute;
   top: 18px;
   left: 18px;
-  background: transparent;
-  border: none;
-  color: #909399;
+  color: #94a3b8;
+}
+
+.form-title {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.form-sub {
+  margin: 0 0 20px;
   font-size: 13px;
-  cursor: pointer;
+  color: #94a3b8;
 }
 
-.back-btn:hover {
-  color: #42b983;
-}
-
-.register-title {
-  margin: 6px 0 4px;
-  font-size: 21px;
-  color: #2c3e50;
-  text-align: center;
-}
-
-.register-subtitle {
-  margin: 0 0 22px;
-  font-size: 12px;
-  color: #a8abb2;
-  text-align: center;
-}
-
-.form-item {
-  margin-bottom: 16px;
-  text-align: left;
-}
-
-.form-row {
+.row-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
 
-.form-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-  color: #606266;
-}
-
-.required {
-  color: #f56c6c;
-}
-
-.form-input {
-  width: 100%;
-  box-sizing: border-box;
-  height: 38px;
-  padding: 0 12px;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
-  font-size: 14px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.form-input:focus {
-  border-color: #42b983;
-}
-
-.form-input.has-error {
-  border-color: #f56c6c;
-}
-
-.error-msg {
-  display: block;
-  margin-top: 5px;
-  font-size: 12px;
-  color: #f56c6c;
-  text-align: left;
-}
-
-.form-error {
-  margin: 0 0 10px;
-}
-
-.submit-btn {
-  width: 100%;
+.age-tip {
   height: 40px;
-  margin-top: 6px;
-  border: none;
-  border-radius: 6px;
-  background: #42b983;
-  color: #fff;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #94a3b8;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.register-btn {
+  width: 100%;
+  height: 44px;
   font-size: 15px;
-  cursor: pointer;
-  transition: background 0.2s;
+  letter-spacing: 4px;
+  margin-top: 4px;
 }
 
-.submit-btn:hover:not(:disabled) {
-  background: #3aa876;
-}
-
-.submit-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
+@media (max-width: 900px) {
+  .brand-panel {
+    display: none;
+  }
 }
 </style>
