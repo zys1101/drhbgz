@@ -10,7 +10,11 @@
 | --- | --- |
 | 数据库 | MySQL（脚本见 `sql/nep_system.sql`，可用 Navicat 直接导入） |
 | 后端 | SpringBoot 3.2.8 + MyBatis-Plus 3.5.12 + springdoc-openapi（Maven 工程，位于 `backend/demo`） |
-| 前端 | Vue3 + Vue CLI + Axios + ECharts（工程位于 `front/`） |
+| 前端 | Vue3 + Vue CLI + Axios + Element Plus + Font Awesome + ECharts（工程位于 `front/`） |
+
+前端采用统一的“生态绿”设计系统（`front/src/assets/theme.css` 定制 Element Plus 主题变量）：
+深绿渐变侧边栏 + Font Awesome 图标，登录/注册为左右分屏品牌页，表格/表单/弹窗/消息提示
+全部基于 Element Plus 组件，AQI 等级与任务状态使用统一彩色标签（`GradeTag` / `StateTag`）。
 
 ## 目录结构
 

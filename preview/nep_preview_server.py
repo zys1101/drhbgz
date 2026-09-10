@@ -16,6 +16,7 @@
   启动：python3 preview/nep_preview_server.py
 """
 import json
+import mimetypes
 import os
 import re
 import sqlite3
@@ -28,6 +29,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(BASE_DIR)
 DB_PATH = os.path.join(BASE_DIR, 'nep_preview.db')
 SEED_PATH = os.path.join(ROOT, 'sql', 'seed_data.json')
+DIST_DIR = os.path.join(ROOT, 'front', 'dist')
 
 TEL_RE = re.compile(r'^1\d{10}$')
 DATE_FMT = '%Y-%m-%d'
@@ -497,6 +499,39 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def send_file_bytes(self, body, mime, cache=False):
+        self.send_response(200)
+        self.send_header('Content-Type', mime)
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'public, max-age=3600' if cache else 'no-cache')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def serve_static(self, path):
+        """托管 front/dist 构建产物；非 /api 的路径 SPA 回退到 index.html"""
+        if not os.path.isdir(DIST_DIR):
+            self.send_json({'code': 404, 'message':
+                            '前端未构建：请先在 front/ 目录执行 npm run build'}, status=404)
+            return
+        rel = path.lstrip('/') or 'index.html'
+        # 去掉查询串后已处理；防目录穿越
+        rel = os.path.normpath(rel).lstrip('/')
+        if rel.startswith('..'):
+            self.send_json({'code': 404, 'message': 'Not Found'}, status=404)
+            return
+        file_path = os.path.join(DIST_DIR, rel)
+        if not os.path.isfile(file_path):
+            # SPA 路由回退
+            file_path = os.path.join(DIST_DIR, 'index.html')
+            rel = 'index.html'
+        mime = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+        if mime.startswith('text/') or mime in ('application/javascript', 'application/json'):
+            mime += '; charset=utf-8'
+        with open(file_path, 'rb') as fp:
+            body = fp.read()
+        self.send_file_bytes(body, mime, cache=(rel != 'index.html'))
+
     def ok(self, data=None, message='操作成功'):
         self.send_json({'code': 200, 'message': message, 'data': data})
 
@@ -533,13 +568,14 @@ class Handler(BaseHTTPRequestHandler):
         qs = {k: v[0] for k, v in parse_qs(parsed.query).items()}
         body = self.read_body() if method in ('POST', 'PUT') else {}
         # 去掉 /api 前缀
+        is_api = path == '/api' or path.startswith('/api/')
         if path.startswith('/api/'):
             path = path[len('/api'):]
         try:
             with _lock:
                 conn = get_conn()
                 try:
-                    self.dispatch(conn, method, path, qs, body)
+                    self.dispatch(conn, method, path, qs, body, is_api)
                 finally:
                     conn.close()
         except BizError as e:
@@ -549,7 +585,7 @@ class Handler(BaseHTTPRequestHandler):
             traceback.print_exc()
             self.send_json({'code': 500, 'message': '操作失败', 'data': str(e)})
 
-    def dispatch(self, conn, method, path, qs, body):
+    def dispatch(self, conn, method, path, qs, body, is_api=False):
         # ---- 认证 ----
         if method == 'POST' and path == '/auth/register':
             _, msg = api_register(conn, body)
@@ -708,6 +744,9 @@ class Handler(BaseHTTPRequestHandler):
         # ---- 其他 ----
         if method == 'GET' and path == '/health':
             return self.ok({'status': 'UP', 'server': 'preview'})
+        # ---- 静态资源 / SPA（页面请求回退 index.html；/api 未匹配仍返回JSON 404）----
+        if method == 'GET' and not is_api:
+            return self.serve_static(path)
         self.send_json({'code': 404, 'message': '接口不存在: %s' % path}, status=404)
 
 
