@@ -50,8 +50,12 @@ npm run serve
 
 ### 4. 仅在线预览（无法运行 SpringBoot 的环境）
 ```bash
-python3 preview/nep_preview_server.py   # 监听 9000，首次启动自动建 SQLite 库并载入种子数据
+cd front && npm run build   # 先构建前端
+cd .. && python3 preview/nep_preview_server.py
 ```
+- 预览服务监听 9000，**同时托管前端页面（front/dist）与 /api 接口**，
+  打开 http://localhost:9000 即可体验完整系统（同源，无需 8080 dev server）。
+- 首次启动自动建 SQLite 库（preview/nep_preview.db）并载入种子数据。
 
 ## 演示账号（密码均为 123456）
 
