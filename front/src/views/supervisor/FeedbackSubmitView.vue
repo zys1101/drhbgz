@@ -1,69 +1,73 @@
 <template>
-  <div class="nep-page">
-    <div class="nep-card form-card">
-      <div class="nep-card-header">
+  <div class="app-page">
+    <div class="app-card">
+      <div class="app-card-head">
         <div>
-          <h2 class="nep-card-title">
-            <span class="nep-title-icon"><i class="fa-solid fa-comment-dots"></i></span>
-            提交空气质量监督信息
+          <h2 class="app-card-title">
+            <span class="app-ico"><i class="fa-solid fa-pen-to-square"></i></span>
+            提交监督反馈
           </h2>
-          <p class="nep-card-sub">参照《空气质量指数（AQI）范围及相应类别表》预估等级并描述观测情况</p>
+          <p class="app-card-sub">按您的实际观测填写，提交后管理员会指派网格员实地检测</p>
         </div>
       </div>
 
-      <div class="nep-card-body">
-        <!-- 未绑定地址引导 -->
-        <div v-if="!profile" class="no-profile">
-          <i class="fa-solid fa-map-location-dot"></i>
-          <p>您还未绑定网格地址，请先完成地址绑定</p>
-          <el-button type="primary" class="nep-btn-gradient" @click="$router.push('/sf/address')">
-            <i class="fa-solid fa-location-dot" style="margin-right:6px"></i>去绑定地址
-          </el-button>
+      <!-- 未绑定地址引导 -->
+      <div v-if="!profile" class="app-empty">
+        <span class="app-empty-icon"><i class="fa-solid fa-map-location-dot"></i></span>
+        <p>您还未绑定网格地址，先完成绑定才能提交反馈</p>
+        <button class="app-btn-primary app-btn-sm" @click="$router.push('/sf/address')">
+          <i class="fa-solid fa-location-dot"></i>去绑定地址
+        </button>
+      </div>
+
+      <template v-else>
+        <!-- 已绑定地址条 -->
+        <div class="app-profile-bar">
+          <div class="profile-pin"><i class="fa-solid fa-location-dot"></i></div>
+          <div class="profile-main">
+            <div class="profile-region">{{ profile.provinceName }} · {{ profile.cityName }}</div>
+            <div class="profile-addr">{{ profile.address }}</div>
+          </div>
+          <button class="profile-edit" @click="$router.push('/sf/address')">
+            <i class="fa-solid fa-pen"></i> 修改
+          </button>
         </div>
 
-        <el-form v-else label-position="top" size="large">
-          <!-- 已绑定地址条 -->
-          <div class="profile-bar">
-            <div class="profile-region">
-              <i class="fa-solid fa-location-dot"></i>
-              <b>{{ profile.provinceName }} · {{ profile.cityName }}</b>
-            </div>
-            <span class="profile-addr">{{ profile.address }}</span>
-            <el-link type="primary" :underline="false" @click="$router.push('/sf/address')">
-              <i class="fa-solid fa-pen"></i> 修改地址
-            </el-link>
-          </div>
+        <div class="app-field">
+          <label class="app-field-label">预估空气等级</label>
+          <el-select v-model="form.estimatedGrade" size="large" style="width: 100%">
+            <el-option v-for="g in gradeOptions" :key="g.value" :value="g.value">
+              <span class="grade-option">
+                <span class="grade-option-dot" :style="{ background: levelColor(g.value) }"></span>
+                {{ g.label }}
+              </span>
+            </el-option>
+          </el-select>
+        </div>
 
-          <div class="row-2">
-            <el-form-item label="预估AQI等级">
-              <el-select v-model="form.estimatedGrade" style="width: 100%">
-                <el-option v-for="g in gradeOptions" :key="g.value" :value="g.value" :label="g.label" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="观测时间">
-              <el-date-picker v-model="observedAt" type="datetime" style="width: 100%"
-                format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" :clearable="false" />
-            </el-form-item>
-          </div>
+        <div class="app-field">
+          <label class="app-field-label">观测时间</label>
+          <el-date-picker v-model="observedAt" type="datetime" style="width: 100%"
+            format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm" :clearable="false" />
+        </div>
 
-          <el-form-item label="空气质量描述">
-            <el-input v-model.trim="form.information" type="textarea" :rows="5" maxlength="500" show-word-limit
-              placeholder="描述您观测到的空气情况：如气味、扬尘、能见度、附近污染源等…" />
-          </el-form-item>
+        <div class="app-field">
+          <label class="app-field-label">空气质量描述</label>
+          <el-input v-model.trim="form.information" type="textarea" :rows="5" maxlength="500" show-word-limit
+            placeholder="描述您观测到的空气情况：如气味、扬尘、能见度、附近污染源等…" />
+        </div>
 
-          <!-- 当前等级参考卡 -->
-          <div class="grade-hint" :style="{ borderColor: hintColor }">
-            <i class="fa-solid fa-circle-info" :style="{ color: hintColor }"></i>
-            <span>{{ hintText }}</span>
-          </div>
+        <!-- 当前等级参考卡 -->
+        <div class="grade-hint" :style="{ borderColor: hintColor }">
+          <i class="fa-solid fa-circle-info" :style="{ color: hintColor }"></i>
+          <span>{{ hintText }}</span>
+        </div>
 
-          <div class="form-actions">
-            <el-button type="primary" size="large" class="nep-btn-gradient" :loading="submitting" @click="handleSubmit">
-              <i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>提交反馈
-            </el-button>
-          </div>
-        </el-form>
-      </div>
+        <el-button type="primary" class="app-btn-primary app-btn-block" size="large" :loading="submitting"
+          @click="handleSubmit">
+          <i class="fa-solid fa-paper-plane"></i>提交反馈
+        </el-button>
+      </template>
     </div>
   </div>
 </template>
@@ -119,6 +123,9 @@ export default {
     this.observedAt = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
   },
   methods: {
+    levelColor(grade) {
+      return (LEVEL_TIPS[grade] || LEVEL_TIPS[1]).color
+    },
     async handleSubmit() {
       if (!this.form.information) {
         ElMessage.warning('请填写空气质量描述')
@@ -150,67 +157,96 @@ export default {
 </script>
 
 <style scoped>
-.form-card {
-  max-width: 780px;
-  margin: 20px auto 0;
-}
-
-/* 未绑定地址 */
-.no-profile {
-  padding: 60px 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  color: #94a3b8;
-}
-
-.no-profile i {
-  font-size: 52px;
-  color: #cbd5e1;
-}
-
-.no-profile p {
-  margin: 0;
-  font-size: 14px;
+/* 桌面端：表单卡片居中限宽，不占满整屏 */
+.app-card {
+  max-width: 920px;
+  margin: 0 auto;
 }
 
 /* 已绑定地址条 */
-.profile-bar {
+.app-profile-bar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  background: linear-gradient(120deg, #ecfdf5, #f0fdfa);
-  border: 1px solid #a7f3d0;
+  gap: 12px;
+  background: var(--app-soft);
+  border: 1px dashed var(--app-ring);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.profile-pin {
+  width: 38px;
+  height: 38px;
   border-radius: 12px;
-  padding: 13px 18px;
-  margin-bottom: 22px;
+  background: #fff;
+  color: var(--app-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.profile-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .profile-region {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #047857;
-  font-size: 14px;
-}
-
-.profile-region i {
-  font-size: 13px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--app-strong);
 }
 
 .profile-addr {
-  flex: 1;
-  min-width: 160px;
-  font-size: 13px;
-  color: #334155;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.row-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
+.profile-edit {
+  border: none;
+  background: transparent;
+  color: var(--app-strong);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.profile-edit:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+/* 表单字段 */
+.app-field {
+  margin-bottom: 18px;
+}
+
+.app-field-label {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 8px;
+}
+
+.grade-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grade-option-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 /* 等级提示 */
@@ -218,28 +254,25 @@ export default {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  border: 1px dashed;
-  border-radius: 10px;
+  border: 1.5px dashed;
+  border-radius: 14px;
   padding: 12px 14px;
-  font-size: 13px;
+  font-size: 12.5px;
+  line-height: 1.7;
   color: #475569;
   background: #fafcfb;
-  margin-bottom: 6px;
+  margin-bottom: 18px;
 }
 
 .grade-hint i {
-  margin-top: 2px;
+  margin-top: 3px;
+  font-size: 14px;
 }
 
-.form-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 14px;
-}
-
-@media (max-width: 640px) {
-  .row-2 {
-    grid-template-columns: 1fr;
-  }
+/* Element Plus 细节（圆角与输入高度更贴合 App 风格） */
+:deep(.el-input__wrapper),
+:deep(.el-textarea__inner),
+:deep(.el-select__wrapper) {
+  border-radius: 14px;
 }
 </style>

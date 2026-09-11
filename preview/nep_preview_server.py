@@ -164,11 +164,14 @@ def verify_password(raw, stored):
 
 # ================================================================ 业务
 FEEDBACK_SELECT = '''
-SELECT aqi.*, p.province_name, c.city_name, e.real_name AS grid_name, e.emp_code AS grid_code
+SELECT aqi.*, p.province_name, c.city_name, e.real_name AS grid_name, e.emp_code AS grid_code,
+       d.aqi_grade, d.so2_grade, d.co_grade, d.pm25_grade,
+       d.submit_date AS measure_date, d.submit_time AS measure_time
 FROM aqi_feedback aqi
 JOIN grid_province p ON aqi.province_id = p.province_id
 JOIN grid_city c ON aqi.city_id = c.city_id
 LEFT JOIN employee e ON aqi.gm_id = e.emp_id
+LEFT JOIN aqi_data d ON d.af_id = aqi.af_id AND d.state = 1
 '''
 
 

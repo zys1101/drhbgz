@@ -115,4 +115,22 @@ public class AqiFeedback implements Serializable {
     /** 指派网格员登录编码 */
     @TableField(exist = false)
     private String gridCode;
+    /** 已确认实测AQI等级（关联 aqi_data 确认数据，未确认时为 null） */
+    @TableField(exist = false)
+    private Integer aqiGrade;
+    /** 已确认实测 SO2 等级 */
+    @TableField(exist = false)
+    private Integer so2Grade;
+    /** 已确认实测 CO 等级 */
+    @TableField(exist = false)
+    private Integer coGrade;
+    /** 已确认实测 PM2.5 等级 */
+    @TableField(exist = false)
+    private Integer pm25Grade;
+    /** 已确认实测数据提交日期 */
+    @TableField(exist = false)
+    private String measureDate;
+    /** 已确认实测数据提交时间 */
+    @TableField(exist = false)
+    private String measureTime;
 }

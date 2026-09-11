@@ -8,7 +8,7 @@
       <h1 class="screen-title">东软环保公众监督系统 · 数据可视化大屏</h1>
       <div class="header-side right">
         <span class="clock">{{ clock }}</span>
-        <button class="exit-btn" @click="$router.push('/')">退出大屏</button>
+        <button class="exit-btn" @click="exitScreen">退出大屏</button>
       </div>
     </header>
 
@@ -89,6 +89,7 @@
 
 <script>
 import VChart from '../components/VChart.vue'
+import { roleHome } from '../constants/aqi'
 import {
   getProvinceStats, getDistributionStats, getTrendStats,
   getRealtimeStats, getCoverageStats
@@ -108,6 +109,18 @@ export default {
       trend: [],
       realtime: { total: 0, good: 0, exceed: 0 },
       coverage: { provinceCovered: 0, provinceTotal: 34, cityCovered: 0, cityTotal: 106, coveredList: [] }
+    }
+  },
+  methods: {
+    exitScreen() {
+      const role = this.$store.getters.role
+      if (role === 'viewer') {
+        // 决策者的角色首页就是大屏本身，退出大屏即退出登录回登录页
+        this.$store.dispatch('logout')
+        this.$router.push({ name: 'login' })
+      } else {
+        this.$router.push(roleHome(role))
+      }
     }
   },
   computed: {

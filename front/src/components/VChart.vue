@@ -20,7 +20,8 @@ export default {
   data() {
     return {
       chart: null,
-      resizeObserver: null
+      resizeObserver: null,
+      resizeRaf: null
     }
   },
   watch: {
@@ -37,11 +38,21 @@ export default {
     this.chart = echarts.init(this.$refs.chartEl)
     this.chart.setOption(this.option)
     this.resizeObserver = new ResizeObserver(() => {
-      this.chart && this.chart.resize()
+      // 推迟到下一帧再 resize：避免在同一帧内因布局变化再次触发观察，
+      // 造成 "ResizeObserver loop completed with undelivered notifications" 运行时报错
+      if (this.resizeRaf) return
+      this.resizeRaf = requestAnimationFrame(() => {
+        this.resizeRaf = null
+        const el = this.$refs.chartEl
+        if (this.chart && el && el.clientWidth > 0 && el.clientHeight > 0) {
+          this.chart.resize()
+        }
+      })
     })
     this.resizeObserver.observe(this.$refs.chartEl)
   },
   beforeUnmount() {
+    if (this.resizeRaf) cancelAnimationFrame(this.resizeRaf)
     if (this.resizeObserver) {
       this.resizeObserver.disconnect()
     }

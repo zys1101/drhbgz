@@ -1,0 +1,158 @@
+/* ============================================================
+   公众监督员端 / 网格员端 · App 风格公共样式（C端，区别于后台布局）
+   两端的主题色由所属布局(.app-layout--supervisor / --grid)注入：
+     --app-grad    主渐变（头部 / 主按钮）
+     --app-strong  主色文字 / 图标
+     --app-soft    主色浅底（标签 / 选中态）
+   ============================================================ */
+
+.app-layout--supervisor {
+  --app-grad: linear-gradient(135deg, #10b981, #047857);
+  --app-soft: #ecfdf5;
+  --app-strong: #047857;
+  --app-bg: #f0fdf4;
+  --app-ring: rgba(16, 185, 129, 0.16);
+}
+
+.app-layout--grid {
+  --app-grad: linear-gradient(135deg, #14b8a6, #0f766e);
+  --app-soft: #f0fdfa;
+  --app-strong: #115e59;
+  --app-bg: #f0fdfa;
+  --app-ring: rgba(20, 184, 166, 0.16);
+}
+
+/* ---------------- 页面容器 ---------------- */
+/* 桌面端：宽屏内容区，居中于 1240px */
+.app-page {
+  padding: 26px 32px 64px;
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ---------------- 通用卡片 ---------------- */
+.app-card {
+  background: #fff;
+  border: 1px solid var(--app-ring);
+  border-radius: 22px;
+  padding: 20px 18px;
+  box-shadow: 0 8px 30px rgba(4, 120, 87, 0.08);
+}
+
+.app-card + .app-card {
+  margin-top: 14px;
+}
+
+.app-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.app-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.app-card-title .app-ico {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: var(--app-soft);
+  color: var(--app-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.app-card-sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* ---------------- 主按钮 ---------------- */
+.app-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 46px;
+  padding: 0 22px;
+  border: none;
+  border-radius: 16px;
+  background: var(--app-grad);
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.35);
+  transition: all 0.2s ease;
+}
+
+.app-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(16, 185, 129, 0.45);
+}
+
+.app-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.app-btn-block {
+  width: 100%;
+}
+
+/* 窄屏按钮（卡片头部的小主按钮） */
+.app-btn-sm {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: 13px;
+}
+
+/* ---------------- 空状态 ---------------- */
+.app-empty {
+  padding: 48px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #94a3b8;
+}
+
+.app-empty .app-empty-icon {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: var(--app-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: var(--app-strong);
+  opacity: 0.85;
+}
+
+.app-empty p {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+/* 移动端：内容不被底部 Tab 导航遮挡，收窄留白 */
+@media (max-width: 768px) {
+  .app-page {
+    padding: 18px 14px 110px;
+  }
+}

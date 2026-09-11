@@ -1,45 +1,41 @@
 <template>
-  <div class="nep-page">
-    <div class="nep-card form-card">
-      <div class="nep-card-header">
+  <div class="app-page">
+    <div class="app-card">
+      <div class="app-card-head">
         <div>
-          <h2 class="nep-card-title">
-            <span class="nep-title-icon"><i class="fa-solid fa-location-dot"></i></span>
+          <h2 class="app-card-title">
+            <span class="app-ico"><i class="fa-solid fa-location-dot"></i></span>
             网格地址绑定
           </h2>
-          <p class="nep-card-sub">选择您所在的网格区域（省、市），并填写日常观测的具体地址</p>
+          <p class="app-card-sub">选择您所在的网格区域（省、市），并填写日常观测的具体地址</p>
         </div>
       </div>
 
-      <div class="nep-card-body">
-        <el-form label-position="top" size="large" class="address-form">
-          <div class="row-2">
-            <el-form-item label="省份">
-              <el-select v-model="form.provinceId" placeholder="请选择省份" filterable style="width: 100%"
-                @change="onProvinceChange">
-                <el-option v-for="p in provinces" :key="p.provinceId" :value="p.provinceId" :label="p.provinceName" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="城市">
-              <el-select v-model="form.cityId" placeholder="请先选择省份" filterable style="width: 100%"
-                :loading="cityLoading">
-                <el-option v-for="c in cities" :key="c.cityId" :value="c.cityId" :label="c.cityName" />
-              </el-select>
-            </el-form-item>
-          </div>
-          <el-form-item label="具体地址">
-            <el-input v-model.trim="form.address" maxlength="100" show-word-limit clearable
-              placeholder="请输入您观测空气质量的具体地址（100字以内）">
-              <template #prefix><i class="fa-solid fa-map-pin"></i></template>
-            </el-input>
+      <el-form label-position="top" size="large" class="address-form">
+        <div class="row-2">
+          <el-form-item label="省份">
+            <el-select v-model="form.provinceId" placeholder="请选择省份" filterable style="width: 100%"
+              @change="onProvinceChange">
+              <el-option v-for="p in provinces" :key="p.provinceId" :value="p.provinceId" :label="p.provinceName" />
+            </el-select>
           </el-form-item>
-          <div class="form-actions">
-            <el-button type="primary" size="large" class="nep-btn-gradient" :loading="saving" @click="handleSave">
-              <i class="fa-solid fa-floppy-disk" style="margin-right:6px"></i>保存地址
-            </el-button>
-          </div>
-        </el-form>
-      </div>
+          <el-form-item label="城市">
+            <el-select v-model="form.cityId" placeholder="请先选择省份" filterable style="width: 100%"
+              :loading="cityLoading">
+              <el-option v-for="c in cities" :key="c.cityId" :value="c.cityId" :label="c.cityName" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <el-form-item label="具体地址">
+          <el-input v-model.trim="form.address" maxlength="100" show-word-limit clearable
+            placeholder="请输入您观测空气质量的具体地址（100字以内）">
+            <template #prefix><i class="fa-solid fa-map-pin"></i></template>
+          </el-input>
+        </el-form-item>
+        <el-button type="primary" size="large" class="app-btn-primary app-btn-block" :loading="saving" @click="handleSave">
+          <i class="fa-solid fa-floppy-disk"></i>保存地址
+        </el-button>
+      </el-form>
     </div>
   </div>
 </template>
@@ -163,7 +159,7 @@ export default {
       const city = this.cities.find(c => c.cityId === this.form.cityId)
       this.saving = true
       try {
-        // 保存到监督员档案接口（用例3-3），后端未连接时降级为本地保存
+        // 保存到监督员档案接口，后端未连接时降级为本地保存
         const res = await saveProfile({
           account: this.myAccount,
           provinceId: this.form.provinceId,
@@ -184,25 +180,21 @@ export default {
 </script>
 
 <style scoped>
-.form-card {
-  max-width: 720px;
-  margin: 20px auto 0;
+/* 桌面端：表单卡片居中限宽 */
+.app-card {
+  max-width: 760px;
+  margin: 0 auto;
 }
 
 .address-form {
   max-width: 640px;
+  margin: 0 auto;
 }
 
 .row-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 8px;
 }
 
 @media (max-width: 640px) {
