@@ -57,6 +57,12 @@
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
             <version>3.5.12</version>
         </dependency>
+        <!-- 如果你的 MyBatis-Plus 版本是 3.5.9，则添加以下内容 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <version>3.5.12</version> <!-- 请替换为你实际使用的 mybatis-plus 版本号 -->
+        </dependency>
         <!--Mybatis的自动生成类的依赖-->
         <dependency>
             <groupId>com.baomidou</groupId>

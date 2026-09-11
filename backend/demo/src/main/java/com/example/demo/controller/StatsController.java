@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.common.ResultVO;
 import com.example.demo.mapper.AqiDataMapper;
 import com.example.demo.service.IGridCityService;
 import com.example.demo.service.IGridProvinceService;
