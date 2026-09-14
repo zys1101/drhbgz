@@ -65,7 +65,8 @@ const TABS = {
   ],
   grid: [
     { path: '/gw/tasks', icon: 'fa-solid fa-clipboard-list', title: '我的任务' },
-    { path: '/gw/measure', icon: 'fa-solid fa-vials', title: '录入实测' }
+    { path: '/gw/measure', icon: 'fa-solid fa-vials', title: '录入实测' },
+    { path: '/gw/leave', icon: 'fa-solid fa-calendar-days', title: '请假申请' }
   ]
 }
 

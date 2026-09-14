@@ -59,6 +59,9 @@ export async function login(account, password, role) {
     if (res.data.code === 200) return res.data.data
     throw new Error(res.data.message || '登录失败')
   } catch (err) {
+    // 后端明确返回的业务错误（如账号不可用/密码错误）直接抛出真实信息，
+    // 不能被 isNetworkError 误判为网络错误而走演示降级
+    if (err && !err.isAxiosError) throw err
     if (isNetworkError(err)) {
       // 后端未连接：降级为本地演示账号
       const all = [...PRESET_USERS, ...loadUsers()]

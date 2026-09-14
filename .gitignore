@@ -12,3 +12,7 @@ front/node_modules/
 *.iml
 .idea/
 *.log
+
+# Python 缓存 / 会话目录
+__pycache__/
+.zcode/

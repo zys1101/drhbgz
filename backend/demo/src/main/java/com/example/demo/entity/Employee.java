@@ -44,7 +44,7 @@ public class Employee implements Serializable {
     /** 负责市编号 */
     private Integer cityId;
 
-    /** 是否工作状态（由东软HR系统管理）: 0否 1是 */
+    /** 是否工作状态（人员管理/请假流程维护）: 0否 1是 */
     private Integer working;
 
     @TableField(exist = false)

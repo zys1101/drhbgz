@@ -1,5 +1,7 @@
 package com.example.demo.service.impl;
 
+import java.util.List;
+
 import com.example.demo.entity.Supervisor;
 import com.example.demo.mapper.SupervisorMapper;
 import com.example.demo.service.ISupervisorService;
@@ -11,6 +13,11 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class SupervisorServiceImpl extends ServiceImpl<SupervisorMapper, Supervisor> implements ISupervisorService {
+
+    @Override
+    public List<Supervisor> selectAllWithNames() {
+        return baseMapper.selectAllWithNames();
+    }
 
     @Override
     public Supervisor selectWithNames(String telId) {

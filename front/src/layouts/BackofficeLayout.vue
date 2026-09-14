@@ -94,6 +94,13 @@ const MENUS = {
       ]
     },
     {
+      caption: '人员管理（HR）',
+      items: [
+        { path: '/admin/hr/grid', icon: 'fa-solid fa-user-gear', title: '网格员管理' },
+        { path: '/admin/hr/supervisor', icon: 'fa-solid fa-users', title: '公众监督员管理' }
+      ]
+    },
+    {
       caption: '基础数据',
       items: [
         { path: '/aqi', icon: 'fa-solid fa-table-cells', title: 'AQI级别管理' }
