@@ -937,6 +937,20 @@ class Handler(BaseHTTPRequestHandler):
             conn.execute('DELETE FROM aqi WHERE aqi_id=?', (int(path.rsplit('/', 1)[-1]),))
             conn.commit()
             return self.ok(True, '删除成功')
+        # ---- AI 助手（MCP 协议）----
+        if method == 'POST' and path == '/mcp':
+            from ai_assistant import api_mcp
+            return self.send_json(api_mcp(conn, body))
+        if method == 'GET' and path == '/ai/tools':
+            from ai_assistant import MCP_TOOLS
+            role = qs.get('role', '') or ''
+            tools = [{'name': t['name'], 'description': t['description']}
+                     for t in MCP_TOOLS if role in t['allowedRoles']]
+            return self.ok(tools, '查询成功')
+        if method == 'POST' and path == '/ai/chat':
+            from ai_assistant import api_ai_chat
+            data, msg = api_ai_chat(conn, body)
+            return self.ok(data, msg)
         # ---- 人员管理（HR）----
         if method == 'GET' and path == '/employee/list':
             data, msg = api_employee_list(conn)

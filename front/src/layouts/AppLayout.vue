@@ -49,11 +49,14 @@
 
       <slot />
     </main>
+    <!-- AI 助手（公众端：网格员/公众监督员各自角色助手） -->
+    <AiAssistant />
   </div>
 </template>
 
 <script>
 import { ElMessageBox } from 'element-plus'
+import AiAssistant from '../components/AiAssistant.vue'
 import { roleHome } from '../constants/aqi'
 
 // 两个公众端的导航项（≤5 项，图标 + 文字）
@@ -85,6 +88,7 @@ const GREET = {
 
 export default {
   name: 'AppLayout',
+  components: { AiAssistant },
   data() {
     return {
       isScrolled: false,

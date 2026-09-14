@@ -64,11 +64,14 @@
         <slot />
       </main>
     </div>
+    <!-- AI 助手（后台端：管理员/决策者角色助手） -->
+    <AiAssistant />
   </div>
 </template>
 
 <script>
 import { ElMessageBox } from 'element-plus'
+import AiAssistant from '../components/AiAssistant.vue'
 import { roleLabel, roleHome } from '../constants/aqi'
 
 // 后台角色（管理员 / 决策者）的侧边栏菜单
@@ -119,6 +122,7 @@ const MENUS = {
 
 export default {
   name: 'BackofficeLayout',
+  components: { AiAssistant },
   computed: {
     menuGroups() {
       return MENUS[this.$store.getters.role] || []
