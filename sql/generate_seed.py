@@ -140,6 +140,18 @@ EMPLOYEES = [
     ('viewer', '王决策', 'viewer', '北京市', None, 1),
 ]
 
+# ---------------------------------------------------------------- 请假示例（人员管理/HR）
+# (网格员编码, 事由, 开始日期, 结束日期, 状态0待审批1已同意2已驳回3已销假, 申请时间, 审批时间)
+LEAVES = [
+    ('grid002', '老家有事，需回家处理', '2026-09-15', '2026-09-17', 0, '2026-09-11 09:12:00', None),
+    ('grid004', '身体不适，医院就诊', '2026-09-18', '2026-09-19', 0, '2026-09-11 14:30:00', None),
+    ('grid005', '病假休养（已同意，未销假，处于请假状态）', '2026-09-08', '2026-09-14', 1,
+     '2026-09-05 10:20:00', '2026-09-06 09:00:00'),
+    ('grid007', '婚假（已销假）', '2026-07-01', '2026-07-05', 3, '2026-06-28 08:40:00', '2026-07-06 08:30:00'),
+    ('grid008', '个人事务请假（已驳回）', '2026-06-10', '2026-06-11', 2, '2026-06-08 16:05:00',
+     '2026-06-09 10:30:00'),
+]
+
 # ---------------------------------------------------------------- 公众监督员
 # (手机号, 姓名, 年龄, 性别, 省名, 城市名, 地址)
 SUPERVISORS = [
@@ -367,6 +379,20 @@ def build():
         fb['state'] = 0
 
     feedbacks.sort(key=lambda f: f['afId'])
+
+    leaves = []
+    for i, (code, reason, start, end, state, apply_dt, approve_dt) in enumerate(LEAVES):
+        emp = next(e for e in employees if e['empCode'] == code)
+        ap_date, ap_time = apply_dt.split(' ')
+        ar_date = ar_time = None
+        if approve_dt:
+            ar_date, ar_time = approve_dt.split(' ')
+        leaves.append(dict(
+            leaveId=i + 1, empId=emp['empId'], reason=reason,
+            startDate=start, endDate=end, state=state,
+            applyDate=ap_date, applyTime=ap_time,
+            approveDate=ar_date, approveTime=ar_time))
+
     return dict(
         provinces=provinces,
         cities=cities,
@@ -375,6 +401,7 @@ def build():
         supervisors=supervisors,
         feedbacks=feedbacks,
         aqiData=aqi_data,
+        leaves=leaves,
         meta=dict(provinceTotal=len(provinces), cityTotal=len(BIG_CITIES),
                   generatedAt=datetime.now().isoformat(timespec='seconds')),
     )
@@ -499,6 +526,22 @@ def render_sql(data):
   KEY `idx_data_state` (`state`),
   KEY `idx_data_date` (`submit_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='网格员实测AQI数据';""")
+    A('-- 8. 请假表（人员管理/HR：网格员请假申请与审批）')
+    A("""CREATE TABLE `leave` (
+  `leave_id` INT NOT NULL AUTO_INCREMENT COMMENT '请假编号',
+  `emp_id` INT NOT NULL COMMENT '请假网格员编号(employee.emp_id)',
+  `reason` VARCHAR(200) NOT NULL COMMENT '请假事由',
+  `start_date` VARCHAR(10) NOT NULL COMMENT '开始日期',
+  `end_date` VARCHAR(10) NOT NULL COMMENT '结束日期',
+  `state` INT NOT NULL DEFAULT 0 COMMENT '状态: 0待审批 1已同意(请假中) 2已驳回 3已销假',
+  `apply_date` VARCHAR(10) DEFAULT NULL COMMENT '申请日期',
+  `apply_time` VARCHAR(8) DEFAULT NULL COMMENT '申请时间',
+  `approve_date` VARCHAR(10) DEFAULT NULL COMMENT '审批/销假日期',
+  `approve_time` VARCHAR(8) DEFAULT NULL COMMENT '审批/销假时间',
+  PRIMARY KEY (`leave_id`),
+  KEY `idx_leave_emp` (`emp_id`),
+  KEY `idx_leave_state` (`state`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='网格员请假表';""")
     A('')
     A('-- ---------------- 种子数据 ----------------')
     A('INSERT INTO `grid_province` (`province_id`,`province_name`) VALUES')
@@ -543,6 +586,13 @@ def render_sql(data):
         d['dataId'], d['afId'], d['so2Grade'], d['coGrade'], d['pm25Grade'], d['aqiGrade'],
         esc(d['empId']), esc(d['gridCode']), esc(d['submitDate']), esc(d['submitTime']), d['state'])
         for d in data['aqiData']) + ';')
+    A('')
+    A('-- 网格员请假（人员管理/HR）')
+    A('INSERT INTO `leave` (`leave_id`,`emp_id`,`reason`,`start_date`,`end_date`,`state`,`apply_date`,`apply_time`,`approve_date`,`approve_time`) VALUES')
+    A(',\n'.join('  (%d,%d,%s,%s,%s,%d,%s,%s,%s,%s)' % (
+        lv['leaveId'], lv['empId'], esc(lv['reason']), esc(lv['startDate']), esc(lv['endDate']),
+        lv['state'], esc(lv['applyDate']), esc(lv['applyTime']),
+        esc(lv['approveDate']), esc(lv['approveTime'])) for lv in data['leaves']) + ';')
     A('')
     A('-- 完成。演示账号：')
     A('--   公众监督员 13800001111/123456   网格员 grid001/123456   管理员 admin/123456   决策者 viewer/123456')

@@ -52,13 +52,26 @@ def get_conn():
 
 
 def init_db():
-    if os.path.exists(DB_PATH):
-        return
-    print('[preview] 初始化数据库:', DB_PATH)
+    fresh = not os.path.exists(DB_PATH)
+    if fresh:
+        print('[preview] 初始化数据库:', DB_PATH)
     with open(SEED_PATH, encoding='utf-8') as fp:
         seed = json.load(fp)
     conn = get_conn()
     c = conn.cursor()
+    if not fresh:
+        # 既有数据库（可能含演示过程中产生的数据）只补齐人员管理相关结构，不重建
+        c.execute('''CREATE TABLE IF NOT EXISTS leave (
+          leave_id INTEGER PRIMARY KEY AUTOINCREMENT, emp_id INTEGER NOT NULL,
+          reason TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL,
+          state INTEGER NOT NULL DEFAULT 0, apply_date TEXT, apply_time TEXT,
+          approve_date TEXT, approve_time TEXT)''')
+        if not c.execute('SELECT 1 FROM leave LIMIT 1').fetchone():
+            _seed_leaves(c, seed)
+        conn.commit()
+        conn.close()
+        print('[preview] 已补齐人员管理（请假）结构，保留原数据')
+        return
     c.executescript('''
     CREATE TABLE grid_province (province_id INTEGER PRIMARY KEY, province_name TEXT NOT NULL);
     CREATE TABLE grid_city (
@@ -120,10 +133,30 @@ def init_db():
             d['empId'], d['gridCode'], d['submitDate'], d['submitTime'], d['state']))
     c.execute("UPDATE sqlite_sequence SET seq=? WHERE name='aqi_data'",
               (max(d['dataId'] for d in seed['aqiData']),))
+    # 人员管理：请假表
+    c.execute('''CREATE TABLE IF NOT EXISTS leave (
+      leave_id INTEGER PRIMARY KEY AUTOINCREMENT, emp_id INTEGER NOT NULL,
+      reason TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL,
+      state INTEGER NOT NULL DEFAULT 0, apply_date TEXT, apply_time TEXT,
+      approve_date TEXT, approve_time TEXT)''')
+    _seed_leaves(c, seed)
     conn.commit()
     conn.close()
-    print('[preview] 种子数据载入完成：省%d 市%d 反馈%d 实测%d' % (
-        len(seed['provinces']), len(seed['cities']), len(seed['feedbacks']), len(seed['aqiData'])))
+    print('[preview] 种子数据载入完成：省%d 市%d 反馈%d 实测%d 请假%d' % (
+        len(seed['provinces']), len(seed['cities']), len(seed['feedbacks']),
+        len(seed['aqiData']), len(seed.get('leaves', []))))
+
+
+def _seed_leaves(c, seed):
+    """载入请假示例数据（待审批/已同意/已驳回），供人员管理演示"""
+    for lv in seed.get('leaves', []):
+        c.execute('INSERT INTO leave (leave_id, emp_id, reason, start_date, end_date, state,'
+                  ' apply_date, apply_time, approve_date, approve_time) VALUES (?,?,?,?,?,?,?,?,?,?)', (
+            lv['leaveId'], lv['empId'], lv['reason'], lv['startDate'], lv['endDate'], lv['state'],
+            lv.get('applyDate'), lv.get('applyTime'), lv.get('approveDate'), lv.get('approveTime')))
+    ids = [lv['leaveId'] for lv in seed.get('leaves', [])]
+    if ids:
+        c.execute("UPDATE sqlite_sequence SET seq=? WHERE name='leave'", (max(ids),))
 
 
 # ================================================================ 工具
@@ -242,7 +275,7 @@ def api_login(conn, body):
         if not verify_password(password, emp['password']):
             raise BizError(400, '账号或密码错误')
         if emp['working'] != 1:
-            raise BizError(400, '账号不可用，请联系管理员（账号状态由东软HR系统管理）')
+            raise BizError(400, '账号不可用，请联系管理员（账号状态由人员管理维护）')
         real_role, real_name = emp['role'], emp['real_name']
         if role and role != real_role:
             raise BizError(400, '该账号不属于当前选择的用户类型')
@@ -316,7 +349,7 @@ def api_assign(conn, body):
         raise BizError(400, '该反馈已完成确认，不能再指派')
     emp = require_grid_worker(conn, grid_code)
     if emp['working'] != 1:
-        raise BizError(400, '该网格员当前处于非工作状态（由东软HR系统管理）')
+        raise BizError(400, '该网格员当前处于非工作状态（请假/人员管理维护）')
     d, t = now_strs()
     conn.execute('UPDATE aqi_feedback SET gm_id=?, assign_date=?, assign_time=?, state=1 WHERE af_id=?',
                  (emp['emp_id'], d, t, af_id))
@@ -406,6 +439,166 @@ def api_grid_workers(conn):
             'region': (r['province_name'] or '') + '-' + (r['city_name'] or ''),
             'working': bool(r['working'])})
     return out, '查询成功'
+
+
+DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
+def api_employee_list(conn):
+    rows = conn.execute('''
+        SELECT e.*, p.province_name, c.city_name FROM employee e
+        LEFT JOIN grid_province p ON e.province_id=p.province_id
+        LEFT JOIN grid_city c ON e.city_id=c.city_id
+        WHERE e.role='grid' ORDER BY e.emp_id''').fetchall()
+    return rows_to_camel(rows), '查询成功'
+
+
+def api_employee_save(conn, body):
+    code = (body.get('empCode') or '').strip()
+    name = (body.get('realName') or '').strip()
+    pwd = body.get('password') or ''
+    if not code:
+        raise BizError(400, '请输入登录编码')
+    if not name:
+        raise BizError(400, '请输入真实姓名')
+    if len(pwd) < 6:
+        raise BizError(400, '初始密码不能少于6位')
+    prov = body.get('provinceId')
+    if prov is None:
+        raise BizError(400, '请选择负责省份')
+    if conn.execute('SELECT 1 FROM employee WHERE emp_code=?', (code,)).fetchone():
+        raise BizError(400, '该登录编码已存在')
+    # 与种子/注册相同的加密：salt$sha256(salt+password)
+    salt = 'nep'
+    pw = salt + '$' + sha256_hex(salt + pwd)
+    working = 1 if body.get('working') in (None, '', 1, True) else 0
+    conn.execute('INSERT INTO employee (emp_code,password,real_name,role,province_id,city_id,working)'
+                 ' VALUES (?,?,?,?,?,?,?)',
+                 (code, pw, name, 'grid', int(prov),
+                  int(body['cityId']) if body.get('cityId') else None, working))
+    conn.commit()
+    return True, '网格员账号创建成功'
+
+
+def api_employee_update(conn, body):
+    emp_id = int(body.get('empId') or 0)
+    emp = conn.execute('SELECT * FROM employee WHERE emp_id=?', (emp_id,)).fetchone()
+    if emp is None:
+        raise BizError(400, '网格员不存在')
+    fields, params = {}, []
+    for col, key in (('real_name', 'realName'), ('province_id', 'provinceId'),
+                     ('city_id', 'cityId'), ('working', 'working')):
+        if body.get(key) is not None:
+            fields[col] = body[key]
+            params.append(body[key])
+    if not fields:
+        raise BizError(400, '没有需要修改的字段')
+    cols = ', '.join('%s=?' % k for k in fields)
+    conn.execute('UPDATE employee SET %s WHERE emp_id=?' % cols, params + [emp_id])
+    conn.commit()
+    return True, '更新成功'
+
+
+def api_leave_apply(conn, body):
+    code = (body.get('empCode') or body.get('gridCode') or '').strip()
+    emp = conn.execute('SELECT * FROM employee WHERE emp_code=?', (code,)).fetchone()
+    if emp is None or emp['role'] != 'grid':
+        raise BizError(400, '网格员不存在')
+    reason = (body.get('reason') or '').strip()
+    start, end = body.get('startDate') or '', body.get('endDate') or ''
+    if not reason:
+        raise BizError(400, '请填写请假事由')
+    if not DATE_RE.match(start) or not DATE_RE.match(end) or start > end:
+        raise BizError(400, '请选择正确的起止日期')
+    d, t = now_strs()
+    conn.execute('INSERT INTO leave (emp_id,reason,start_date,end_date,state,apply_date,apply_time)'
+                 ' VALUES (?,?,?,?,0,?,?)',
+                 (emp['emp_id'], reason, start, end, d, t))
+    conn.commit()
+    return True, '请假申请已提交，等待管理员审批'
+
+
+LEAVE_SELECT = '''
+SELECT l.*, e.emp_code, e.real_name AS grid_name
+FROM leave l JOIN employee e ON l.emp_id = e.emp_id
+'''
+
+
+def api_leave_list(conn, qs):
+    conds, params = ['1=1'], []
+    if qs.get('empCode'):
+        conds.append('e.emp_code = ?')
+        params.append(qs['empCode'])
+    if qs.get('state'):
+        conds.append('l.state = ?')
+        params.append(int(qs['state']))
+    rows = conn.execute(LEAVE_SELECT + ' WHERE ' + ' AND '.join(conds) +
+                        ' ORDER BY l.leave_id DESC', params).fetchall()
+    return rows_to_camel(rows), '查询成功'
+
+
+def api_leave_approve(conn, body):
+    leave_id = int(body.get('leaveId') or 0)
+    agree = bool(body.get('agree'))
+    row = conn.execute('SELECT * FROM leave WHERE leave_id=?', (leave_id,)).fetchone()
+    if row is None:
+        raise BizError(400, '请假申请不存在')
+    if row['state'] != 0:
+        raise BizError(400, '该申请已审批，不能重复处理')
+    d, t = now_strs()
+    if agree:
+        # 同意请假：网格员进入请假（非工作）状态，登录与指派会被拦截
+        conn.execute('UPDATE leave SET state=1, approve_date=?, approve_time=? WHERE leave_id=?',
+                     (d, t, leave_id))
+        conn.execute('UPDATE employee SET working=0 WHERE emp_id=?', (row['emp_id'],))
+        msg = '已同意请假，该网格员进入请假状态'
+    else:
+        conn.execute('UPDATE leave SET state=2, approve_date=?, approve_time=? WHERE leave_id=?',
+                     (d, t, leave_id))
+        msg = '已驳回请假申请'
+    conn.commit()
+    return True, msg
+
+
+def api_leave_back(conn, body):
+    leave_id = int(body.get('leaveId') or 0)
+    row = conn.execute('SELECT * FROM leave WHERE leave_id=?', (leave_id,)).fetchone()
+    if row is None or row['state'] != 1:
+        raise BizError(400, '仅已同意的请假可以销假')
+    d, t = now_strs()
+    conn.execute('UPDATE leave SET state=3, approve_date=?, approve_time=? WHERE leave_id=?',
+                 (d, t, leave_id))
+    conn.execute('UPDATE employee SET working=1 WHERE emp_id=?', (row['emp_id'],))
+    conn.commit()
+    return True, '已销假，网格员恢复工作状态'
+
+
+def api_supervisor_list(conn):
+    rows = conn.execute('''
+        SELECT s.*, p.province_name, c.city_name FROM supervisor s
+        LEFT JOIN grid_province p ON s.province_id=p.province_id
+        LEFT JOIN grid_city c ON s.city_id=c.city_id
+        ORDER BY s.register_date DESC, s.tel_id''').fetchall()
+    return rows_to_camel(rows), '查询成功'
+
+
+def api_supervisor_update(conn, body):
+    tel = (body.get('telId') or '').strip()
+    sup = conn.execute('SELECT * FROM supervisor WHERE tel_id=?', (tel,)).fetchone()
+    if sup is None:
+        raise BizError(400, '公众监督员不存在')
+    fields, params = {}, []
+    for col, key in (('real_name', 'realName'), ('age', 'age'), ('gender', 'gender'),
+                     ('province_id', 'provinceId'), ('city_id', 'cityId'), ('address', 'address')):
+        if body.get(key) is not None:
+            fields[col] = body[key]
+            params.append(body[key])
+    if not fields:
+        raise BizError(400, '没有需要修改的字段')
+    cols = ', '.join('%s=?' % k for k in fields)
+    conn.execute('UPDATE supervisor SET %s WHERE tel_id=?' % cols, params + [tel])
+    conn.commit()
+    return True, '更新成功'
 
 
 def api_stats_province(conn):
@@ -744,6 +937,48 @@ class Handler(BaseHTTPRequestHandler):
             conn.execute('DELETE FROM aqi WHERE aqi_id=?', (int(path.rsplit('/', 1)[-1]),))
             conn.commit()
             return self.ok(True, '删除成功')
+        # ---- AI 助手（MCP 协议）----
+        if method == 'POST' and path == '/mcp':
+            from ai_assistant import api_mcp
+            return self.send_json(api_mcp(conn, body))
+        if method == 'GET' and path == '/ai/tools':
+            from ai_assistant import MCP_TOOLS
+            role = qs.get('role', '') or ''
+            tools = [{'name': t['name'], 'description': t['description']}
+                     for t in MCP_TOOLS if role in t['allowedRoles']]
+            return self.ok(tools, '查询成功')
+        if method == 'POST' and path == '/ai/chat':
+            from ai_assistant import api_ai_chat
+            data, msg = api_ai_chat(conn, body)
+            return self.ok(data, msg)
+        # ---- 人员管理（HR）----
+        if method == 'GET' and path == '/employee/list':
+            data, msg = api_employee_list(conn)
+            return self.ok(data, msg)
+        if method == 'POST' and path == '/employee/save':
+            _, msg = api_employee_save(conn, body)
+            return self.ok(True, msg)
+        if method == 'POST' and path == '/employee/update':
+            _, msg = api_employee_update(conn, body)
+            return self.ok(True, msg)
+        if method == 'POST' and path == '/leave/apply':
+            _, msg = api_leave_apply(conn, body)
+            return self.ok(True, msg)
+        if method == 'GET' and path == '/leave/list':
+            data, msg = api_leave_list(conn, qs)
+            return self.ok(data, msg)
+        if method == 'POST' and path == '/leave/approve':
+            _, msg = api_leave_approve(conn, body)
+            return self.ok(True, msg)
+        if method == 'POST' and path == '/leave/back':
+            _, msg = api_leave_back(conn, body)
+            return self.ok(True, msg)
+        if method == 'GET' and path == '/supervisor/list':
+            data, msg = api_supervisor_list(conn)
+            return self.ok(data, msg)
+        if method == 'POST' and path == '/supervisor/update':
+            _, msg = api_supervisor_update(conn, body)
+            return self.ok(True, msg)
         # ---- 其他 ----
         if method == 'GET' and path == '/health':
             return self.ok({'status': 'UP', 'server': 'preview'})

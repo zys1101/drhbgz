@@ -121,7 +121,7 @@ public class AuthController {
                 throw new BusinessException("账号或密码错误");
             }
             if (emp.getWorking() == null || emp.getWorking() != 1) {
-                throw new BusinessException("账号不可用，请联系管理员（账号状态由东软HR系统管理）");
+                throw new BusinessException("账号不可用，请联系管理员（账号状态由人员管理维护）");
             }
             realRole = emp.getRole();
             realName = emp.getRealName();

@@ -1,6 +1,6 @@
 -- ============================================================
 -- 东软环保公众监督系统 MySQL 初始化脚本
--- 版本: 1.0.0-0.0.0    生成时间: 2026-09-10 01:33
+-- 版本: 1.0.0-0.0.0    生成时间: 2026-09-11 16:57
 -- 用法: 在 Navicat / mysql 客户端中直接执行（会先重建库 nep_system）
 -- ============================================================
 DROP DATABASE IF EXISTS `nep_system`;
@@ -106,6 +106,22 @@ CREATE TABLE `aqi_data` (
   KEY `idx_data_state` (`state`),
   KEY `idx_data_date` (`submit_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='网格员实测AQI数据';
+-- 8. 请假表（人员管理/HR：网格员请假申请与审批）
+CREATE TABLE `leave` (
+  `leave_id` INT NOT NULL AUTO_INCREMENT COMMENT '请假编号',
+  `emp_id` INT NOT NULL COMMENT '请假网格员编号(employee.emp_id)',
+  `reason` VARCHAR(200) NOT NULL COMMENT '请假事由',
+  `start_date` VARCHAR(10) NOT NULL COMMENT '开始日期',
+  `end_date` VARCHAR(10) NOT NULL COMMENT '结束日期',
+  `state` INT NOT NULL DEFAULT 0 COMMENT '状态: 0待审批 1已同意(请假中) 2已驳回 3已销假',
+  `apply_date` VARCHAR(10) DEFAULT NULL COMMENT '申请日期',
+  `apply_time` VARCHAR(8) DEFAULT NULL COMMENT '申请时间',
+  `approve_date` VARCHAR(10) DEFAULT NULL COMMENT '审批/销假日期',
+  `approve_time` VARCHAR(8) DEFAULT NULL COMMENT '审批/销假时间',
+  PRIMARY KEY (`leave_id`),
+  KEY `idx_leave_emp` (`emp_id`),
+  KEY `idx_leave_state` (`state`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='网格员请假表';
 
 -- ---------------- 种子数据 ----------------
 INSERT INTO `grid_province` (`province_id`,`province_name`) VALUES
@@ -1402,6 +1418,14 @@ INSERT INTO `aqi_data` (`data_id`,`af_id`,`so2_grade`,`co_grade`,`pm25_grade`,`a
   (505,577,1,1,2,2,7,'grid007','2026-09-06','18:04:13',0),
   (506,550,2,1,6,6,1,'grid001','2026-09-07','11:41:30',2),
   (507,556,2,1,6,6,2,'grid002','2026-09-07','14:37:23',2);
+
+-- 网格员请假（人员管理/HR）
+INSERT INTO `leave` (`leave_id`,`emp_id`,`reason`,`start_date`,`end_date`,`state`,`apply_date`,`apply_time`,`approve_date`,`approve_time`) VALUES
+  (1,2,'老家有事，需回家处理','2026-09-15','2026-09-17',0,'2026-09-11','09:12:00',NULL,NULL),
+  (2,4,'身体不适，医院就诊','2026-09-18','2026-09-19',0,'2026-09-11','14:30:00',NULL,NULL),
+  (3,5,'病假休养（已同意，未销假，处于请假状态）','2026-09-08','2026-09-14',1,'2026-09-05','10:20:00','2026-09-06','09:00:00'),
+  (4,7,'婚假（已销假）','2026-07-01','2026-07-05',3,'2026-06-28','08:40:00','2026-07-06','08:30:00'),
+  (5,8,'个人事务请假（已驳回）','2026-06-10','2026-06-11',2,'2026-06-08','16:05:00','2026-06-09','10:30:00');
 
 -- 完成。演示账号：
 --   公众监督员 13800001111/123456   网格员 grid001/123456   管理员 admin/123456   决策者 viewer/123456

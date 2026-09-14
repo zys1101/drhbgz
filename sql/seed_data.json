@@ -17530,9 +17530,71 @@
    "state": 2
   }
  ],
+ "leaves": [
+  {
+   "leaveId": 1,
+   "empId": 2,
+   "reason": "老家有事，需回家处理",
+   "startDate": "2026-09-15",
+   "endDate": "2026-09-17",
+   "state": 0,
+   "applyDate": "2026-09-11",
+   "applyTime": "09:12:00",
+   "approveDate": null,
+   "approveTime": null
+  },
+  {
+   "leaveId": 2,
+   "empId": 4,
+   "reason": "身体不适，医院就诊",
+   "startDate": "2026-09-18",
+   "endDate": "2026-09-19",
+   "state": 0,
+   "applyDate": "2026-09-11",
+   "applyTime": "14:30:00",
+   "approveDate": null,
+   "approveTime": null
+  },
+  {
+   "leaveId": 3,
+   "empId": 5,
+   "reason": "病假休养（已同意，未销假，处于请假状态）",
+   "startDate": "2026-09-08",
+   "endDate": "2026-09-14",
+   "state": 1,
+   "applyDate": "2026-09-05",
+   "applyTime": "10:20:00",
+   "approveDate": "2026-09-06",
+   "approveTime": "09:00:00"
+  },
+  {
+   "leaveId": 4,
+   "empId": 7,
+   "reason": "婚假（已销假）",
+   "startDate": "2026-07-01",
+   "endDate": "2026-07-05",
+   "state": 3,
+   "applyDate": "2026-06-28",
+   "applyTime": "08:40:00",
+   "approveDate": "2026-07-06",
+   "approveTime": "08:30:00"
+  },
+  {
+   "leaveId": 5,
+   "empId": 8,
+   "reason": "个人事务请假（已驳回）",
+   "startDate": "2026-06-10",
+   "endDate": "2026-06-11",
+   "state": 2,
+   "applyDate": "2026-06-08",
+   "applyTime": "16:05:00",
+   "approveDate": "2026-06-09",
+   "approveTime": "10:30:00"
+  }
+ ],
  "meta": {
   "provinceTotal": 34,
   "cityTotal": 106,
-  "generatedAt": "2026-09-10T01:33:00"
+  "generatedAt": "2026-09-11T16:57:01"
  }
 }

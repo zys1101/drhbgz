@@ -29,6 +29,17 @@
     └── nep_preview_server.py # 沙箱在线预览服务（Python 标准库 + SQLite，接口与后端完全一致）
 ```
 
+## 升级注意（已部署过的旧环境）
+
+旧库升级到人员管理模块：若你之前导入过早期版本的 `sql/nep_system.sql`（无 `leave` 请假表），
+进入“人员管理-网格员管理”会因 `/api/leave/list` 查询失败而提示“操作失败”。修复方式二选一：
+
+1. **增量升级（推荐，保留现有数据）**：对 `nep_system` 库执行 `sql/hr_upgrade.sql`（幂等补建 `leave` 表并载入示例请假），然后重新编译并重启后端。
+2. **整体重导**：重新导入最新的 `sql/nep_system.sql`（会重建库，含 leave 表与种子，注意清空现有演示数据）。
+
+无论哪种方式，请确保后端已重新编译（IDEA `mvn clean package` 或重新 Run）后再访问；
+若使用预览服务（preview），重启 `python preview/nep_preview_server.py` 即可自动幂等补表。
+
 ## 快速开始（本机 IDEA / VSCode 环境）
 
 ### 1. 初始化数据库
@@ -62,8 +73,8 @@ cd .. && python3 preview/nep_preview_server.py
 | 端 | 角色 | 账号 | 说明 |
 | --- | --- | --- | --- |
 | NEPS | 公众监督员 | 13800001111（张伟） | 也可自行注册，手机号即身份唯一识别 |
-| NEPG | AQI检测网格员 | grid001（王铁柱，沈阳市） | 另有 grid002~grid010；grid005 为非工作状态（HR系统管理） |
-| NEPM | 系统管理员 | admin | 网格员/管理员/决策者账号由“东软HR系统”统一管理，不可注册 |
+| NEPG | AQI检测网格员 | grid001（王铁柱，沈阳市） | 另有 grid002~grid010；账号由管理员在“人员管理”中注册维护，grid005 处于请假状态 |
+| NEPM | 系统管理员 | admin | 可在“人员管理”中注册网格员账号、维护信息（地区/工作状态/请假审批），并管理公众监督员信息 |
 | NEPV | 决策者 | viewer | 可视化大屏 |
 
 ## 四端功能与需求的对应
@@ -76,7 +87,8 @@ cd .. && python3 preview/nep_preview_server.py
 - 浏览历史反馈（3-5）：仅本人、按时间倒序 → `GET /api/aqiFeedback/query?telId=`
 
 ### NEPG 网格员端（/gw/*）
-- 登录（3-6）：登录编码，校验工作状态（HR系统）
+- 登录（3-6）：登录编码，校验工作状态（请假/人员管理维护）
+- 请假申请（新增）：填写事由与起止日期，由管理员审批；同意后进入请假（非工作）状态，无法登录与接单，销假后恢复
 - 浏览指派任务（3-7）→ `GET /api/task/list/{gridCode}`
 - 输入并提交实测 AQI 数据（3-8）：SO2/CO/PM2.5 三项浓度等级必填，
   **AQI = MAX（SO2AQI，COAQI，PM2.5AQI）** → `POST /api/task/measure`
@@ -86,6 +98,10 @@ cd .. && python3 preview/nep_preview_server.py
 - 指派网格员（3-10）：本地指派优先（当前网格区域有在岗网格员），否则就近异地指派 → `POST /api/task/assign`
 - 确认 AQI 数据（3-11）：列表/查询/详情/确认纳入统计/退回重新检测 → `GET /api/aqiData/list|confirm/{id}|reject/{id}`
 - 统计数据管理（五项）→ `GET /api/stats/province|distribution|trend|realtime|coverage`
+- 人员管理（HR，新增）：
+  · 网格员管理（/admin/hr/grid）：注册网格员账号（编码/姓名/初始密码/负责省-市）、维护地区与工作状态
+  · 请假审批（/admin/hr/grid 请假审批页）：审批网格员请假（同意→请假中/驳回），销假恢复工作状态
+  · 公众监督员管理（/admin/hr/supervisor）：查看档案（手机号/姓名/年龄/性别/绑定地区/地址），编辑基本信息 → `GET/POST /api/employee|leave|supervisor/*`
 - AQI 级别表维护（附录数据）→ `/api/aqi/*`
 
 ### NEPV 决策者端（/screen）

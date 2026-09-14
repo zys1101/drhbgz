@@ -51,7 +51,7 @@ public class TaskServiceImpl implements ITaskService {
             throw new BusinessException("网格员不存在");
         }
         if (worker.getWorking() == null || worker.getWorking() != 1) {
-            throw new BusinessException("该网格员当前处于非工作状态（由东软HR系统管理）");
+            throw new BusinessException("该网格员当前处于非工作状态（请假/人员管理维护）");
         }
         LocalDateTime now = LocalDateTime.now();
         feedback.setGmId(worker.getEmpId());

@@ -17,6 +17,17 @@ spring:
     username: root
     password: As.123456      # 请改成自己的MySQL密码
 
+# AI 助手（大模型，可切换，遵循老师 README 约定：切换远程/本地模型只改这里）
+# 未配置 api-key 时本块不生效，AI 助手自动使用规则意图引擎（与预览服务契约一致）
+# spring:
+#   ai:
+#     openai:
+#       base-url: http://127.0.0.1:11434/v1   # Ollama 本地；换成在线大模型地址即可
+#       api-key: ollama                        # Ollama 任意值；在线模型填真实 key
+#       chat:
+#         options:
+#           model: qwen3:latest
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true

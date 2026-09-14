@@ -49,11 +49,14 @@
 
       <slot />
     </main>
+    <!-- AI 助手（公众端：网格员/公众监督员各自角色助手） -->
+    <AiAssistant />
   </div>
 </template>
 
 <script>
 import { ElMessageBox } from 'element-plus'
+import AiAssistant from '../components/AiAssistant.vue'
 import { roleHome } from '../constants/aqi'
 
 // 两个公众端的导航项（≤5 项，图标 + 文字）
@@ -65,7 +68,8 @@ const TABS = {
   ],
   grid: [
     { path: '/gw/tasks', icon: 'fa-solid fa-clipboard-list', title: '我的任务' },
-    { path: '/gw/measure', icon: 'fa-solid fa-vials', title: '录入实测' }
+    { path: '/gw/measure', icon: 'fa-solid fa-vials', title: '录入实测' },
+    { path: '/gw/leave', icon: 'fa-solid fa-calendar-days', title: '请假申请' }
   ]
 }
 
@@ -84,6 +88,7 @@ const GREET = {
 
 export default {
   name: 'AppLayout',
+  components: { AiAssistant },
   data() {
     return {
       isScrolled: false,
