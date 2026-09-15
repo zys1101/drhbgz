@@ -49,7 +49,7 @@
 </template>
 
 <script>
-import { getAiTools, chatWithAi } from '../api/ai'
+import { getAiTools, streamChat } from '../api/ai'
 
 // 三角色助手标题（权限由服务端按角色强校验）
 const TITLES = {
@@ -114,26 +114,32 @@ export default {
       this.messages.push({ role: 'user', text })
       this.input = ''
       this.thinking = true
-      try {
-        const res = await chatWithAi({ role: this.role, account: this.account, message: text })
-        if (res.data.code === 200) {
-          const d = res.data.data
-          const calls = d.toolCalls || []
-          this.messages.push({
-            role: 'ai',
-            text: d.reply,
-            toolName: calls.length ? calls.map(c => c.name).join('、') : ''
-          })
-        } else {
-          this.messages.push({ role: 'ai', text: res.data.message || '操作失败' })
-        }
-      } catch (err) {
-        this.messages.push({ role: 'ai', text: '网络异常，请确认后端服务已启动' })
-      } finally {
-        this.thinking = false
+      // 创建 ai 消息对象：toolName 先展示工具调用，text 由 SSE delta 逐块追加（打字机效果）
+      const aiMsg = { role: 'ai', text: '', toolName: '' }
+      this.messages.push(aiMsg)
+      const scroll = () => {
         this.$nextTick(() => {
           if (this.$refs.bodyRef) this.$refs.bodyRef.scrollTop = this.$refs.bodyRef.scrollHeight
         })
+      }
+      try {
+        await streamChat({ role: this.role, account: this.account, message: text }, (ev) => {
+          if (ev.type === 'tool') {
+            const names = aiMsg.toolName ? aiMsg.toolName.split('、') : []
+            if (!names.includes(ev.name)) names.push(ev.name)
+            aiMsg.toolName = names.join('、')
+          } else if (ev.type === 'delta') {
+            aiMsg.text += ev.text || ''
+          }
+          scroll()
+        })
+        if (!aiMsg.text) aiMsg.text = '（无回复）'
+      } catch (err) {
+        console.error('AI 流式对话失败', err)
+        aiMsg.text = '网络异常，请确认后端服务已启动'
+      } finally {
+        this.thinking = false
+        scroll()
       }
     },
     askTool(t) {
