@@ -25,6 +25,8 @@
 │   └── generate_seed.py      # 种子生成器：python3 sql/generate_seed.py 重新生成上面两个文件
 ├── backend/demo/             # SpringBoot 后端（正式后端，端口 9000，上下文 /api）
 ├── front/                    # Vue3 前端（devServer 端口 8080，/api 代理到 9000）
+├── auto_test/                # UI 自动化测试工程（Java 17 + Selenium 4 + Chrome，见 README.md）
+├── doc/                      # 测试文档（软件测试报告 / 自动化测试报告，.md + .docx）
 └── preview/
     └── nep_preview_server.py # 沙箱在线预览服务（Python 标准库 + SQLite，接口与后端完全一致）
 ```
@@ -121,6 +123,12 @@ cd .. && python3 preview/nep_preview_server.py
 
 - 后端 `com.example.demo.util.SecretUtil`：`salt$sha256(salt+明文)` 加盐存储，登录时校验。
 - 种子账号密码均为 123456（已按该算法预生成）。
+
+## 测试与文档
+
+- **`doc/软件测试报告-东软环保公众监督系统.md`**（及 .docx）：依据《Web管理系统软件测试模板》编制的功能/非功能测试报告，含 54 条功能用例（登录注册、反馈、指派、实测、确认、人员管理、统计大屏、AQI级别）与兼容性/易用性/安全/可靠性/性能测试结果。
+- **`doc/自动化测试报告-东软环保公众监督系统.md`**（及 .docx）：依据《Web管理系统自动化测试模板》编制的 UI 自动化测试报告，含 5 个测试类的关键代码与执行结果。
+- **`auto_test/`**：可运行的 UI 自动化工程（Java 17 + Selenium 4 + Chrome，Maven 管理，chromedriver 由 Selenium Manager 自动下载）。5 个测试类：`LoginTest`（4 角色登录+异常分支）、`SupervisorFeedbackTest`（注册+提交反馈+历史回显）、`FeedbackAssignTest`（查询/指派/删除）、`GridMeasureTest`（反馈→指派→实测→确认端到端闭环）、`HrGridTest`（网格员增改+请假审批+状态联动）。运行方式见 `auto_test/README.md`。
 
 ## 沙箱预览服务说明
 
