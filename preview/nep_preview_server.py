@@ -21,6 +21,7 @@ import os
 import re
 import sqlite3
 import threading
+import time
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -676,8 +677,26 @@ def api_stats_coverage(conn):
         'coveredList': covered_list}, '查询成功'
 
 
+
+
+def chunk_reply(text, size=6):
+    """把回复按标点优先切成小块，用于 SSE 流式逐块输出"""
+    import re
+    parts = re.split(r'(?<=[；，。！？：:\n])', text)
+    chunks = []
+    for p in parts:
+        if not p:
+            continue
+        if len(p) <= size * 2:
+            chunks.append(p)
+        else:
+            for i in range(0, len(p), size):
+                chunks.append(p[i:i + size])
+    return chunks or [text]
+
 # ================================================================ HTTP 服务
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
     server_version = 'NEP-Preview/1.0'
 
     def log_message(self, fmt, *args):  # 安静模式：仅打印关键请求
@@ -937,7 +956,32 @@ class Handler(BaseHTTPRequestHandler):
             conn.execute('DELETE FROM aqi WHERE aqi_id=?', (int(path.rsplit('/', 1)[-1]),))
             conn.commit()
             return self.ok(True, '删除成功')
-        # ---- AI 助手（MCP 协议）----
+        # ---- AI 助手（MCP 协议 + SSE 流式）----
+        if method == 'POST' and path == '/ai/chat/stream':
+            from ai_assistant import api_ai_chat
+            result, _msg = api_ai_chat(conn, body)
+            reply = result.get('reply', '')
+            calls = result.get('toolCalls') or []
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Transfer-Encoding', 'chunked')
+            self.end_headers()
+
+            def _chunk(data):
+                b = data.encode('utf-8')
+                self.wfile.write(('%x\r\n' % len(b)).encode('ascii') + b + b'\r\n')
+                self.wfile.flush()
+
+            for c in calls:
+                _chunk('data: ' + json.dumps({'type': 'tool', 'name': c.get('name')}, ensure_ascii=False) + '\n\n')
+            for ch in chunk_reply(reply):
+                _chunk('data: ' + json.dumps({'type': 'delta', 'text': ch}, ensure_ascii=False) + '\n\n')
+                time.sleep(0.03)
+            _chunk('data: ' + json.dumps({'type': 'done'}) + '\n\n')
+            self.wfile.write(b'0\r\n\r\n')
+            self.wfile.flush()
+            return None
         if method == 'POST' and path == '/mcp':
             from ai_assistant import api_mcp
             return self.send_json(api_mcp(conn, body))

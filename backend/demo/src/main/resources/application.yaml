@@ -11,8 +11,22 @@ springdoc:
 
 # 数据库的链接配置（先执行 sql/nep_system.sql 建库）
 spring:
+  ai:
+    openai:
+        base-url: https://api.siliconflow.cn/
+        api-key: "sk-hnxyshrwjnyvpplvkqrlnknmoxmbifwlrakjzmsumasjaigk"
+        chat:
+          options:
+            model: "deepseek-ai/DeepSeek-V4-Flash"
+            temperature: 0.1
+#      base-url: http://127.0.0.1:11434/
+#      api-key: "ollama"
+#      chat:
+#        options:
+#          model: "qwen3:latest"
+#          temperature: 0.1
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name:  com.mysql.cj.jdbc.Driver #数据库驱动
     url: jdbc:mysql://localhost:3306/nep_system?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true
     username: root
     password: As.123456      # 请改成自己的MySQL密码
