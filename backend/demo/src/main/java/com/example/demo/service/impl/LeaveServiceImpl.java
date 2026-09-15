@@ -42,8 +42,8 @@ public class LeaveServiceImpl extends ServiceImpl<LeaveMapper, Leave> implements
         if (reason == null || reason.trim().isEmpty()) {
             throw new IllegalArgumentException("请填写请假事由");
         }
-        boolean dateOk = startDate != null && startDate.matches("\d{4}-\d{2}-\d{2}")
-                && endDate != null && endDate.matches("\d{4}-\d{2}-\d{2}")
+        boolean dateOk = startDate != null && startDate.matches("\\d{4}-\\d{2}-\\d{2}")
+                && endDate != null && endDate.matches("\\d{4}-\\d{2}-\\d{2}")
                 && startDate.compareTo(endDate) <= 0;
         if (!dateOk) {
             throw new IllegalArgumentException("请选择正确的起止日期");

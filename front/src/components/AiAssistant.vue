@@ -25,7 +25,7 @@
           <div v-for="(m, i) in messages" :key="i" class="ai-msg" :class="m.role">
             <div class="ai-msg-bubble">
               <div v-if="m.toolName" class="ai-toolline"><i class="fa-solid fa-link"></i>已调用工具：{{ m.toolName }}</div>
-              <div class="ai-msg-text">{{ m.text }}</div>
+              <div class="ai-msg-text">{{ m.text && m.displayLen != null ? m.text.slice(0, m.displayLen) : m.text }}</div>
             </div>
           </div>
           <div v-if="thinking" class="ai-msg ai-role">
@@ -114,8 +114,9 @@ export default {
       this.messages.push({ role: 'user', text })
       this.input = ''
       this.thinking = true
-      // 创建 ai 消息对象：toolName 先展示工具调用，text 由 SSE delta 逐块追加（打字机效果）
-      const aiMsg = { role: 'ai', text: '', toolName: '' }
+      // 创建 ai 消息对象：toolName 先展示工具调用，text 由 SSE delta 逐块追加，
+      // displayLen 控制“打字机”逐字渲染的进度（前端兜底，即使代理整体缓冲也能逐字打出）
+      const aiMsg = { role: 'ai', text: '', toolName: '', displayLen: 0 }
       this.messages.push(aiMsg)
       const scroll = () => {
         this.$nextTick(() => {
@@ -130,17 +131,39 @@ export default {
             aiMsg.toolName = names.join('、')
           } else if (ev.type === 'delta') {
             aiMsg.text += ev.text || ''
+            this.startReveal(aiMsg)
+          } else if (ev.type === 'error') {
+            aiMsg.text = (aiMsg.text ? aiMsg.text + '\n' : '') + (ev.text || '生成失败')
+            this.startReveal(aiMsg)
           }
           scroll()
         })
         if (!aiMsg.text) aiMsg.text = '（无回复）'
+        aiMsg.displayLen = aiMsg.text.length
       } catch (err) {
         console.error('AI 流式对话失败', err)
         aiMsg.text = '网络异常，请确认后端服务已启动'
+        aiMsg.displayLen = aiMsg.text.length
       } finally {
         this.thinking = false
         scroll()
       }
+    },
+    // 前端“打字机”渲染兜底：把已收到的 text 按节奏逐字显现，
+    // 即使预览代理把 SSE 整体缓冲，界面仍然逐字输出，保证流式交互观感。
+    startReveal(aiMsg) {
+      if ('displayLen' in aiMsg && aiMsg.displayLen == null) aiMsg.displayLen = 0
+      if (this._revealTimer) return // 已有定时器在跑，仅追加即可
+      const step = () => {
+        const target = (aiMsg.text || '').length
+        if (aiMsg.displayLen < target) {
+          aiMsg.displayLen = Math.min(target, aiMsg.displayLen + 8)
+          this._revealTimer = setTimeout(step, 25)
+          return
+        }
+        this._revealTimer = null
+      }
+      this._revealTimer = setTimeout(step, 20)
     },
     askTool(t) {
       this.input = '帮我' + t.description

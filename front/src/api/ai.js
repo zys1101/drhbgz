@@ -30,26 +30,33 @@ export async function streamChat(payload, onEvent) {
     body: JSON.stringify(payload)
   })
   if (!resp.ok) throw new Error('HTTP ' + resp.status)
+
   const reader = resp.body.getReader()
   const decoder = new TextDecoder('utf-8')
   let buf = ''
+
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
     buf += decoder.decode(value, { stream: true })
+
     let idx
+    // SSE 事件之间用 \n\n 分隔
     while ((idx = buf.indexOf('\n\n')) >= 0) {
       const raw = buf.slice(0, idx)
       buf = buf.slice(idx + 2)
-      const line = raw.split('\n').find(l => l.startsWith('data: '))
-      if (!line) continue
-      let payloadObj
-      try {
-        payloadObj = JSON.parse(line.slice(6))
-      } catch (e) {
-        continue
+
+      // 一个事件块里可能有多行（如 data:xxx\ndata:yyy），逐行处理 data: 行
+      for (const line of raw.split('\n')) {
+        if (!line.startsWith('data:')) continue
+        const json = line.slice(5).trim()      // ← 关键：slice(5) + trim
+        if (!json) continue
+        try {
+          onEvent && onEvent(JSON.parse(json))
+        } catch (_) {
+          // 忽略解析失败的行（如非 JSON 的原始文本）
+        }
       }
-      onEvent && onEvent(payloadObj)
     }
   }
 }

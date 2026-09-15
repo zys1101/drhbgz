@@ -3,6 +3,8 @@ package com.example.demo.service;
 import com.example.demo.entity.AqiFeedback;
 import com.example.demo.mapper.AqiDataMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -66,7 +68,7 @@ public class AiAssistantService {
     /** MCP 工具注册表（name/description/inputSchema/allowedRoles） */
     public static List<Map<String, Object>> toolDefinitions() {
         List<Map<String, Object>> tools = new ArrayList<>();
-        tools.add(tool("weather.now", "查询指定城市的实时天气与空气质量（温度/天气现象/湿度/风力/AQI等级）",
+        tools.add(tool("weather.now", "查询指定城市的实时天气（天气现象/温度/湿度/风力/发布时间，来源 uapis.cn），参数 city 传城市名如 长春",
                 "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市名，如 沈阳市\"}}}",
                 ROLE_GRID, ROLE_SUPERVISOR, ROLE_ADMIN, ROLE_VIEWER));
         tools.add(tool("grid.task.list", "查询当前网格员被指派的待检测任务列表",
@@ -119,6 +121,7 @@ public class AiAssistantService {
     }
 
     // ---------------------------------------------------------------- 天气引擎
+    private static final ObjectMapper JACKSON = new ObjectMapper();
     private static final String[] WEATHER_PHENOMENA = {"晴", "多云", "阴", "小雨", "中雨", "雷阵雨", "轻度霾"};
     private static final String[] WIND_DIRS = {"东风", "南风", "西风", "北风", "东南风", "西南风"};
 
@@ -137,11 +140,79 @@ public class AiAssistantService {
     }
 
     public Map<String, Object> weatherOf(String cityName) {
-        boolean exists = cityService.count(new LambdaQueryWrapper<com.example.demo.entity.GridCity>()
-                .eq(com.example.demo.entity.GridCity::getCityName, cityName)) > 0;
-        if (!exists) {
-            throw new IllegalArgumentException("未找到城市「" + cityName + "」，请从系统大城市列表中选择");
+        String city = normalizeCity(cityName);
+        // 优先联网获取真实天气；失败则用离线模拟兜底（保证任何城市都能回答）
+        Map<String, Object> online = fetchWeatherOnline(city);
+        if (online != null) {
+            online.put("source", "在线实时数据");
+            return online;
         }
+        Map<String, Object> sim = simulateWeather(city);
+        sim.put("source", "离线模拟数据（网络不可达时兜底）");
+        return sim;
+    }
+
+    // ---------------------------------------------------------------- 联网天气
+    private String normalizeCity(String name) {
+        if (name == null) return "沈阳市";
+        name = name.trim();
+        if (name.isEmpty()) return "沈阳市";
+        if (!name.endsWith("市")) name = name + "市";
+        return name;
+    }
+
+    /** 尝试从联网天气源(uapis.cn)获取真实数据；失败或超时返回 null
+     *  参考 https://uapis.cn/docs/api-reference/get-misc-weather
+     *  响应示例：{"province":"吉林省","city":"长春市","adcode":"220100","weather":"晴",
+     *            "weather_icon":"100","temperature":23,"wind_direction":"西风",
+     *            "wind_power":"4级","humidity":26,"report_time":"11 分钟前发布"} */
+    private Map<String, Object> fetchWeatherOnline(String city) {
+        try {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(5))
+                    .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+                    .build();
+            String url = "https://uapis.cn/api/v1/misc/weather?city="
+                    + java.net.URLEncoder.encode(city, "UTF-8");
+            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(url))
+                    .header("User-Agent", "curl/8.0")
+                    .timeout(java.time.Duration.ofSeconds(8))
+                    .GET()
+                    .build();
+            java.net.http.HttpResponse<String> resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) return null;
+            return parseUapisWeatherJson(resp.body(), city);
+        } catch (Exception e) {
+            log.debug("联网天气查询失败({}): {}", city, e.toString());
+            return null;
+        }
+    }
+
+    private Map<String, Object> parseUapisWeatherJson(String body, String city) {
+        try {
+            JsonNode root = JACKSON.readTree(body);
+            String weather = root.path("weather").asText("");
+            if (weather.isEmpty()) return null;
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("city", root.path("city").asText(city));
+            out.put("province", root.path("province").asText(""));
+            out.put("phenomenon", weather);
+            out.put("temperature", root.path("temperature").asText(""));
+            out.put("humidity", root.path("humidity").asText(""));
+            String dir = root.path("wind_direction").asText("");
+            String power = root.path("wind_power").asText("");
+            out.put("wind", (dir + (power.isEmpty() ? "" : (" " + power))).trim());
+            out.put("reportTime", root.path("report_time").asText(""));
+            return out;
+        } catch (Exception e) {
+            log.debug("解析联网天气失败: {}", e.toString());
+            return null;
+        }
+    }
+
+    // ---------------------------------------------------------------- 离线模拟（兜底）
+    private Map<String, Object> simulateWeather(String cityName) {
         int h = cityHash(cityName);
         int temp = 8 + mask(h, 0, 26);
         int hum = 30 + mask(h, 4, 61);
@@ -283,12 +354,43 @@ public class AiAssistantService {
     }
 
     // ---------------------------------------------------------------- 答复组织
+    /** 供大模型“自驱”调用：按角色强校验后执行业务工具，并返回格式化结果文本给模型。
+     *  角色由服务端从对话上下文注入，模型无法伪造，从而保证三端权限不越权。 */
+    public String callToolForAi(String tool, Map<String, Object> args, String role) {
+        if (tool == null || tool.isEmpty()) {
+            return "工具名不能为空";
+        }
+        try {
+            Object result = execTool(tool, args == null ? Map.of() : args, role);
+            return prettyToolResult(tool, result);
+        } catch (SecurityException e) {
+            return "无权调用工具：" + e.getMessage();
+        } catch (Exception e) {
+            return "工具调用出错：" + (e.getMessage() == null ? e.toString() : e.getMessage());
+        }
+    }
+
     public String prettyToolResult(String name, Object value) {
         if ("weather.now".equals(name) && value instanceof Map) {
             @SuppressWarnings("unchecked")
             Map<String, Object> v = (Map<String, Object>) value;
-            return v.get("city") + "：" + v.get("phenomenon") + "，气温" + v.get("temperature") + "℃，"
-                    + v.get("wind") + "，湿度" + v.get("humidity") + "%，AQI=" + v.get("aqi") + "（" + v.get("aqiGrade") + "）";
+            StringBuilder sb = new StringBuilder();
+            sb.append(v.get("city")).append("：").append(v.get("phenomenon"));
+            sb.append("，气温").append(v.get("temperature")).append("℃");
+            Object wind = v.get("wind");
+            if (wind != null && !String.valueOf(wind).isEmpty()) {
+                sb.append("，").append(wind);
+            }
+            sb.append("，湿度").append(v.get("humidity")).append("%");
+            Object aqi = v.get("aqi");
+            if (aqi != null) {
+                sb.append("，AQI=").append(aqi).append("（").append(v.get("aqiGrade")).append("）");
+            }
+            Object src = v.get("source");
+            if (src != null) {
+                sb.append("【").append(src).append("】");
+            }
+            return sb.toString();
         }
         if (value instanceof Map) {
             return String.valueOf(value);
@@ -412,10 +514,25 @@ public class AiAssistantService {
     }
 
     private static String matchCity(String msg) {
-        for (String c : new String[]{"沈阳市", "大连市", "长春市", "哈尔滨市", "石家庄市", "北京市", "上海市",
-                "广州市", "深圳市", "成都市", "武汉市", "西安市", "济南市", "青岛市", "杭州市", "南京市", "天津市", "重庆市"}) {
+        // 优先匹配已知大城市（不区分是否带“市”后缀）
+        String[] cities = {"沈阳", "大连", "长春", "哈尔滨", "石家庄", "北京", "上海", "广州", "深圳",
+                "成都", "武汉", "西安", "济南", "青岛", "杭州", "南京", "天津", "重庆"};
+        for (String c : cities) {
             if (msg.contains(c)) {
-                return c;
+                return c + "市";
+            }
+        }
+        // 兜底：截取“天气/气温”前面最近的中文城市片段
+        for (String key : new String[]{"天气", "气温", "温度"}) {
+            int i = msg.indexOf(key);
+            if (i > 0) {
+                String before = msg.substring(0, i);
+                int d = before.lastIndexOf("的");
+                if (d >= 0) before = before.substring(d + 1);
+                before = before.replaceAll("[查询看请问今天明天呢啊怎么样]|[0-9]", "").trim();
+                if (!before.isEmpty() && before.length() <= 6) {
+                    return before.endsWith("市") ? before : before + "市";
+                }
             }
         }
         return "沈阳市";
