@@ -10,9 +10,13 @@ import java.io.Serializable;
 
 /**
  * 请假表（人员管理：网格员请假申请与管理员审批）
+ *
+ * 注意：leave 是 MySQL 保留字，表名必须加反引号，否则 MyBatis-Plus 生成的
+ * SQL 会变成 `... FROM leave WHERE ...` 而报语法错误（1149/1064），
+ * 表现为“网格员管理”页提示“操作失败”。
  */
 @Data
-@TableName("leave")
+@TableName("`leave`")
 public class Leave implements Serializable {
 
     private static final long serialVersionUID = 1L;
