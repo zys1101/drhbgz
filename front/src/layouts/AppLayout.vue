@@ -57,6 +57,7 @@
 <script>
 import { ElMessageBox } from 'element-plus'
 import AiAssistant from '../components/AiAssistant.vue'
+import { getProfile } from '../api/auth'
 import { roleHome } from '../constants/aqi'
 
 // 两个公众端的导航项（≤5 项，图标 + 文字）
@@ -135,6 +136,7 @@ export default {
     window.addEventListener('scroll', this.onScroll, { passive: true })
     this.onScroll()
     this.$nextTick(() => this.initCursor())
+    this.ensureSupervisorProfile()
   },
   beforeUnmount() {
     window.removeEventListener('scroll', this.onScroll)
@@ -207,6 +209,28 @@ export default {
         requestAnimationFrame(tick)
       }
       tick()
+    },
+    /**
+     * 公众监督员：进入监督员端时补载“绑定的网格地址”。
+     * 该档案此前只在“网格地址”页读取并缓存在 localStorage，一旦换浏览器/清缓存
+     * （自动化测试每次登录都会清 localStorage），已绑定地址的监督员会被误判为
+     * “未绑定地址”，导致提交反馈页不可用。这里按后端档案补齐。
+     */
+    async ensureSupervisorProfile() {
+      if (this.roleKey !== 'supervisor') return
+      if (this.$store.state.profile) return
+      const account = this.$store.state.user ? this.$store.state.user.account : ''
+      if (!account) return
+      try {
+        // 注意：getProfile 已解包，返回 { data: <档案对象>, mock }
+        const res = await getProfile(account)
+        const sup = res && res.data
+        if (sup && sup.provinceId) {
+          this.$store.dispatch('saveProfile', sup)
+        }
+      } catch (e) {
+        // 后端未连接时保持“未绑定地址”引导态
+      }
     },
     handleLogout() {
       ElMessageBox.confirm('确定要退出登录吗？', '提示', {
