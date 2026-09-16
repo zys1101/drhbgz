@@ -8,6 +8,10 @@ preview/nep_preview.db
 front/dist/
 front/node_modules/
 
+# 自动化测试工程构建产物与运行截图
+auto_test/target/
+auto_test/screenshots/
+
 # IDE / 日志
 *.iml
 .idea/
