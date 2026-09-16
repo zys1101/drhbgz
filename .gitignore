@@ -11,6 +11,8 @@ front/node_modules/
 # 自动化测试工程构建产物与运行截图
 auto_test/target/
 auto_test/screenshots/
+# 每次运行都会重新生成的结果文件（UTF-8 明细，仅作本地留档）
+auto_test/test-results.tsv
 
 # IDE / 日志
 *.iml
