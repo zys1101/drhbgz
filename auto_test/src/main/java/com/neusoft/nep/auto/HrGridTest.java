@@ -64,7 +64,7 @@ public class HrGridTest extends BaseTest {
                 row.findElement(By.xpath(".//button[.//span[normalize-space()='编辑']]")).click();
                 sleep(1000);
                 WebElement nameInput = driver.findElement(By.xpath("//input[@placeholder='真实姓名']"));
-                nameInput.clear();
+                clearInput(nameInput);
                 nameInput.sendKeys(EDIT_NAME);
                 clickButtonByText("保存");
                 sleep(1500);
@@ -101,9 +101,11 @@ public class HrGridTest extends BaseTest {
                     "//div[contains(@class,'el-tabs__item') and normalize-space(.)='请假审批']"))).click();
             sleep(1000);
             WebElement leaveRow = null;
+            // 只用本次运行唯一的登录编码定位，避免命中历史遗留数据：
+            // EDIT_NAME 是固定常量，上一轮运行残留的“已同意·请假中”记录会被误选。
             for (WebElement r : driver.findElements(By.xpath(
                     "//div[contains(@class,'el-table__body-wrapper')]//tbody/tr"))) {
-                if (r.getText().contains(NEW_CODE) || r.getText().contains(EDIT_NAME)) {
+                if (r.getText().contains(NEW_CODE)) {
                     leaveRow = r;
                     break;
                 }
@@ -131,12 +133,13 @@ public class HrGridTest extends BaseTest {
             // ---------- 6. 请假中账号无法登录（状态联动验证） ----------
             System.out.println("---- 联动用例：请假中账号 " + NEW_CODE + " 再次登录应被拒绝 ----");
             login("网格员", NEW_CODE, PASSWORD);
-            sleep(1500);
-            check("登录被拒绝（账号不可用）", getLastMessage().contains("账号不可用"), getLastMessage());
+            check("登录被拒绝（账号不可用）", getLastAuthMessage().contains("账号不可用"), getLastAuthMessage());
             check("停留在登录页", driver.getCurrentUrl().contains("/login"), driver.getCurrentUrl());
             screenshot("Leave_login_blocked");
 
             summary("网格员管理与请假审批自动化测试");
+        } catch (Exception e) {
+            exception("用例执行中断", e);
         } finally {
             closeBrowser();
         }

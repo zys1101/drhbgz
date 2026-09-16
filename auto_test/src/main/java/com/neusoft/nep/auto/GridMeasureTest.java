@@ -37,9 +37,8 @@ public class GridMeasureTest extends BaseTest {
             sleep(1000);
             WebElement field = wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath(
                     "//div[contains(@class,'app-field') and .//label[contains(text(),'预估空气等级')]]")));
-            selectClickable(field).click();
-            sleep(500);
-            clickVisibleDropdownItem("三级（轻度污染）");
+            openSelect(field);
+            chooseDropdownItem("三级（轻度污染）", field);
             fillTextarea("描述您观测到的空气情况", MARK + "：燃煤电厂厂区周边有刺鼻气味，疑似 SO₂ 超标，请核实。");
             clickButtonByContainsText("提交反馈");
             sleep(1500);
@@ -88,15 +87,19 @@ public class GridMeasureTest extends BaseTest {
             // 找到包含标识的任务卡片，点击其“录入实测数据”
             WebElement taskCard = wait.until(ExpectedConditions.presenceOfElementLocated(
                     By.xpath("//div[contains(@class,'task-card')][.//p[contains(text(),'" + MARK + "')]]")));
-            taskCard.findElement(By.xpath(".//button[contains(.,'录入实测数据')]")).click();
-            sleep(1200);
+            // 该按钮触发路由跳转：点击后校验 URL，未生效则回退 JS 点击
+            clickVerified(taskCard.findElement(By.xpath(".//button[contains(.,'录入实测数据')]")),
+                    () -> driver.getCurrentUrl().contains("/gw/measure"), "录入实测数据");
+            sleep(600);
             check("进入实测录入页", driver.getCurrentUrl().contains("/gw/measure"), driver.getCurrentUrl());
 
             // 依次选择三个污染物等级（DOM 顺序：SO₂、CO、PM2.5）
-            List<WebElement> selects = driver.findElements(By.xpath(
-                    "//div[contains(@class,'measure-item')]//div[contains(@class,'el-select')]"));
-            check("实测录入表单包含 3 个等级下拉框", selects.size() == 3, "数量=" + selects.size());
-            if (selects.size() == 3) {
+            // 注意：不能用 "//div[contains(@class,'el-select')]" 计数——EP 的 select 内部
+            // 还有 el-select__wrapper / __selection / __placeholder 等大量同前缀 div，
+            // 一个下拉框会被数成 6 个。这里按 .measure-item 录入项计数。
+            List<WebElement> items = driver.findElements(By.cssSelector(".measure-item"));
+            check("实测录入表单包含 3 个污染物录入项", items.size() == 3, "数量=" + items.size());
+            if (items.size() == 3) {
                 // 按 DOM 顺序选择三个污染物的等级（.measure-item 内每行一个下拉框）
                 selectOptionInScope(".measure-item", 0, "二级（良）");
                 selectOptionInScope(".measure-item", 1, "二级（良）");
@@ -125,17 +128,19 @@ public class GridMeasureTest extends BaseTest {
             sleep(1500);
             List<WebElement> dataRows = driver.findElements(By.xpath(
                     "//div[contains(@class,'el-table__body-wrapper')]//tbody/tr"));
+            // 说明：关键词已按地址过滤到本次实测数据；表格行内不展示“具体地址”（只显示 省·市），
+            // 因此按网格员编码 grid001 定位行即可，AQI 等级列由 GradeTag 渲染为“三级·轻度”。
             WebElement targetRow = null;
             for (WebElement row : dataRows) {
-                if (row.getText().contains("grid001") && row.getText().contains(SUP_ADDRESS)) {
+                if (row.getText().contains("grid001")) {
                     targetRow = row;
                     break;
                 }
             }
-            check("检索到本次实测数据（地址+grid001）", targetRow != null, "共 " + dataRows.size() + " 行未匹配");
+            check("检索到本次实测数据（网格员 grid001）", targetRow != null, "共 " + dataRows.size() + " 行未匹配");
             if (targetRow != null) {
                 check("数据状态为“待确认”", targetRow.getText().contains("待确认"), targetRow.getText());
-                check("系统计算 AQI 等级列为“轻度污染”", targetRow.getText().contains("轻度污染"), targetRow.getText());
+                check("系统计算 AQI 等级列为“轻度污染”", targetRow.getText().contains("轻度"), targetRow.getText());
                 // 确认按钮直接生效（无二次确认弹窗；“退回”才有确认弹窗）
                 targetRow.findElement(By.xpath(".//button[.//span[normalize-space()='确认']]")).click();
                 sleep(1500);
@@ -145,19 +150,10 @@ public class GridMeasureTest extends BaseTest {
             }
 
             summary("端到端业务链路自动化测试（反馈→指派→实测→确认）");
+        } catch (Exception e) {
+            exception("链路用例执行中断", e);
         } finally {
             closeBrowser();
         }
-    }
-
-    /** 在所有已显示的下拉选项中点击包含指定文字的一项 */
-    private static void clickVisibleDropdownItem(String optionText) {
-        for (WebElement item : driver.findElements(By.cssSelector(".el-select-dropdown__item"))) {
-            if (item.isDisplayed() && item.getText().contains(optionText)) {
-                item.click();
-                return;
-            }
-        }
-        throw new org.openqa.selenium.NoSuchElementException("下拉选项不存在：" + optionText);
     }
 }

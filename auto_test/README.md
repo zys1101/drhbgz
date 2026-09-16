@@ -49,6 +49,26 @@ mvn -q compile exec:java -Dexec.mainClass=com.neusoft.nep.auto.GridMeasureTest
 mvn -q compile exec:java -Dexec.mainClass=com.neusoft.nep.auto.HrGridTest
 ```
 
+### 方式三：一键运行全部用例
+
+```bash
+cd auto_test
+mvn -q compile exec:java -Dexec.mainClass=com.neusoft.nep.auto.RunAllTest
+```
+
+依次执行 5 个用例并累计失败项；单个用例运行异常不会中断其余用例。
+
+### 附：接口层核对（无需浏览器，可离线运行）
+
+`tools/api_flow_check.py` 用标准库直接调用后端接口，逐项核对 5 个 UI 用例所依赖的
+业务流程与提示文案（登录矩阵、注册、提交反馈、指派/删除、反馈→指派→实测→确认、人员管理+请假审批+状态联动）：
+
+```bash
+python auto_test/tools/api_flow_check.py     # 需后端已在 9000 端口运行
+```
+
+适合在**无法启动浏览器/无外网下载驱动**的环境下先行确认"后端行为与用例预期一致"。
+
 ## 执行顺序建议
 
 | 顺序 | 用例 | 说明 |
@@ -72,5 +92,33 @@ mvn -q compile exec:java -Dexec.mainClass=com.neusoft.nep.auto.HrGridTest
 
 - 控制台逐项输出 `[通过]` / `[失败]`，失败时自动截图到 `screenshots/`；
 - 每个用例结束时输出该用例的通过/失败统计；
+- **同时写入 `test-results.tsv`（UTF-8，制表符分隔）**，便于脚本解析与留档：
+  `RUN`（运行头）/ `SUITE`（用例开始）/ `PASS`/`FAIL`（逐条断言，含实际值）/ `PAGE`（点击或输入未生效时的现场）/ `SUMMARY`（通过失败汇总）。
+  中文控制台在部分环境（Windows GBK 控制台 + 重定向）会乱码，该文件不受影响。
 - 自动化断言基于页面提示（ElMessage）+ URL 跳转 + 表格数据三重校验，
   与《软件测试报告》中的手工用例编号相互印证。
+
+## 交互可靠性说明（Element Plus 2.14 + 本机环境实测）
+
+基类对以下三类“原生操作已送达但页面无反应”的情况做了**校验 + JS 兜底**，
+避免用例随机失败（这些坑均已在真实浏览器中复现并修正）：
+
+1. **点击**：角色页签、菜单项、卡片、按钮偶发点了不生效 → 点击后校验预期效果（active 状态 / URL 变化 / 弹窗出现），未生效则回退 JS 点击；
+2. **输入**：页面跳转后 `sendKeys` 偶发无输入效果 → 写入后回读 `value`，不一致则用 JS 赋值并派发 `input` 事件（保证 v-model 同步）；
+3. **下拉框**：EP 2.14 的占位文字是 `div.el-select__placeholder`（不是 `span`），且展开面板需等待渲染；收起误开的面板必须再次点击该 select 自身，**不能点 body**（`el-dialog` 默认 `close-on-click-modal`，点 body 会把弹窗关掉）。
+
+另外：`el-date-picker`（daterange）不能用 `sendKeys` 逐字键入（焦点不切换，值会拼接成一个输入框），
+必须先点开面板、再对起止输入框分别赋值并回车；登录提示 `ElMessage` 约 3 秒自动消失，
+基类在登录返回前先记录（`getLastAuthMessage()`），避免断言读不到提示。
+
+
+## 常见问题
+
+| 现象 | 原因与处理 |
+| --- | --- |
+| `mvn compile` 报 `未报告的异常错误 java.lang.InterruptedException` | 基类中误用了原生 `Thread.sleep`；统一改用 `BaseTest.sleep()`（本仓库已修复） |
+| 运行时报 `NoSuchSessionException` / 一直卡在打开浏览器 | Selenium Manager 需联网下载与本机 Chrome 版本匹配的 chromedriver；离线环境请自备同版本驱动并指定 `-Dwebdriver.chrome.driver=<路径>` |
+| 提示 `chromedriver` 版本与浏览器不匹配 | 升级/降级驱动，或在 `pom.xml` 中调整 `selenium.version` 后重新编译 |
+| 用例全部失败且提示网络异常 | 后端未启动：前端 8080 仅做 `/api` 代理，需先启动 `backend/demo`（或 `python preview/nep_preview_server.py`） |
+| 无外网、也无法装浏览器驱动 | 先用 `tools/api_flow_check.py` 在接口层核对业务行为，再在具备驱动的机器上执行 UI 用例 |
+

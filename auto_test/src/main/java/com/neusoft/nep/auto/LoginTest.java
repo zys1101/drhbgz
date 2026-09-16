@@ -46,7 +46,7 @@ public class LoginTest extends BaseTest {
                     sleep(1200);
 
                     String url = driver.getCurrentUrl();
-                    String msg = getLastMessage();
+                    String msg = getLastAuthMessage();
                     if ("success".equals(expect)) {
                         check("URL 已离开登录页", !url.contains("/login"), url);
                         check("提示包含“" + expectText + "”", msg.contains(expectText), msg);
@@ -66,7 +66,7 @@ public class LoginTest extends BaseTest {
             try {
                 login("管理员", "", "");
                 sleep(1200);
-                String msg = getLastMessage();
+                String msg = getLastAuthMessage();
                 check("空输入出现“请输入账号和密码”警告", msg.contains("请输入账号和密码"), msg);
                 check("仍停留在登录页", driver.getCurrentUrl().contains("/login"), driver.getCurrentUrl());
                 screenshot("Login_empty");
