@@ -57,3 +57,5 @@ nep:
     repool-hours: 24
     # 扫描间隔（毫秒），默认 5 分钟
     repool-scan-interval: 300000
+    # 单个网格员可同时承担的在办任务数上限（决策看板据此推算“是否需要增员”）
+    worker-capacity: 3

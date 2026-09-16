@@ -121,8 +121,9 @@ public class GridMeasureTest extends BaseTest {
                         bodyText.contains("当前网格区域 AQI 等级") && bodyText.contains("三级（轻度污染）"),
                         "结果区文案不符合预期");
                 screenshot("E2E_measure_form");
-                clickButtonByContainsText("提交实测数据");
-                sleep(1500);
+                clickVerified(findButtonByContainsText("提交实测数据"),
+                        () -> getLastMessage().contains("提交成功"), "提交实测数据");
+                sleep(1200);
                 check("实测数据提交成功", getLastMessage().contains("提交成功"), getLastMessage());
             }
 
@@ -139,15 +140,17 @@ public class GridMeasureTest extends BaseTest {
             List<WebElement> dataRows = driver.findElements(By.xpath(
                     "//div[contains(@class,'el-table__body-wrapper')]//tbody/tr"));
             // 说明：关键词已按地址过滤到本次实测数据；表格行内不展示“具体地址”（只显示 省·市），
-            // 因此按网格员编码定位行即可，AQI 等级列由 GradeTag 渲染为“三级·轻度”。
+            // 因此按网格员编码 + “待确认”定位行（列表按数据编号倒序，首条命中即本次提交的数据）。
+            // 只按网格员编码匹配会命中该网格员的历史记录（例如上一轮已退回的数据）。
             WebElement targetRow = null;
             for (WebElement row : dataRows) {
-                if (row.getText().contains(gridCode)) {
+                String text = row.getText();
+                if (text.contains(gridCode) && text.contains("待确认")) {
                     targetRow = row;
                     break;
                 }
             }
-            check("检索到本次实测数据（网格员 " + gridCode + "）", targetRow != null,
+            check("检索到本次实测数据（网格员 " + gridCode + " 且状态为待确认）", targetRow != null,
                     "共 " + dataRows.size() + " 行未匹配");
             if (targetRow != null) {
                 check("数据状态为“待确认”", targetRow.getText().contains("待确认"), targetRow.getText());

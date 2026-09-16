@@ -73,8 +73,11 @@ public class SupervisorFeedbackTest extends BaseTest {
             // 填写空气质量描述
             fillTextarea("描述您观测到的空气情况", mark + "：建筑工地围挡缺失，扬尘较大，建议洒水降尘。");
             // 提交
-            clickButtonByContainsText("提交反馈");
-            sleep(1500);
+            // 提交按钮：点击后校验是否出现成功提示，未生效则回退 JS 点击
+            // （本环境原生点击偶发“已送达但 Vue 无响应”，静默不提交会让后续断言全部失败）
+            clickVerified(findButtonByContainsText("提交反馈"),
+                    () -> getLastMessage().contains("提交成功"), "提交反馈");
+            sleep(1200);
             check("提交成功提示", getLastMessage().contains("提交成功"), getLastMessage());
             screenshot("Feedback_submit_success");
 

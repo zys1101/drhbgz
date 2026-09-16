@@ -16,6 +16,7 @@
   启动：python3 preview/nep_preview_server.py
 """
 import json
+import math
 import mimetypes
 import os
 import re
@@ -23,6 +24,7 @@ import sqlite3
 import threading
 import time
 from datetime import date, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -810,6 +812,215 @@ def api_stats_coverage(conn):
         'coveredList': covered_list}, '查询成功'
 
 
+# ---------------------------------------------------------------- 决策者（NEPV）看板统计
+# 口径与 backend/demo 的 DecisionStatsController 逐行对应：
+#   · 忙碌：在岗（working=1）且名下存在 state=1（已指派未完成）任务的网格员
+#   · 空闲：在岗但没有在办任务的网格员
+#   · 需增员：存在未处理的增员请求；或待指派任务量超过“空闲网格员 × 人均承载上限”
+#   · 覆盖不足：该城市没有在岗网格员（有反馈却无人可派）
+#   · 环境良好：反馈环比未上升，且该城市已确认实测的平均 AQI 等级 ≤ 2（优/良）
+# 人均在办任务承载上限对应 SpringBoot 的 nep.task.worker-capacity（默认 3），可用环境变量覆盖
+WORKER_CAPACITY = int(os.environ.get('NEP_WORKER_CAPACITY', '3'))
+
+WORKFORCE_WORKER_SELECT = '''
+SELECT e.emp_id, e.province_id, e.city_id, e.working,
+       p.province_name, c.city_name
+FROM employee e
+LEFT JOIN grid_province p ON e.province_id = p.province_id
+LEFT JOIN grid_city c ON e.city_id = c.city_id
+WHERE e.role = 'grid'
+ORDER BY e.emp_id
+'''
+
+BUSY_BY_GRID_SELECT = '''
+SELECT gm_id, COUNT(*) AS cnt FROM aqi_feedback
+WHERE state = 1 AND gm_id IS NOT NULL GROUP BY gm_id
+'''
+
+# 各城市已确认实测的平均 AQI 等级与样本数（判断“环境是否确实良好”）
+CITY_AVG_GRADE_SELECT = '''
+SELECT f.city_id, AVG(d.aqi_grade) AS avg_grade, COUNT(*) AS measured
+FROM aqi_data d JOIN aqi_feedback f ON d.af_id = f.af_id
+WHERE d.state = 1 GROUP BY f.city_id
+'''
+
+# 各城市在岗网格员数
+CITY_WORKING_SELECT = '''
+SELECT city_id, COUNT(*) AS cnt FROM employee
+WHERE role = 'grid' AND working = 1 AND city_id IS NOT NULL GROUP BY city_id
+'''
+
+# 各城市待指派任务数（state=0）
+CITY_PENDING_SELECT = '''
+SELECT city_id, COUNT(*) AS cnt FROM aqi_feedback WHERE state = 0 GROUP BY city_id
+'''
+
+
+def api_stats_workforce(conn):
+    """网格员人力看板：总数/在岗/非在岗/忙碌/空闲 + 是否需要增员"""
+    workers = conn.execute(WORKFORCE_WORKER_SELECT).fetchall()
+    busy_by_grid = {r['gm_id']: r['cnt']
+                    for r in conn.execute(BUSY_BY_GRID_SELECT).fetchall()}
+
+    total = len(workers)
+    on_leave = 0
+    busy = 0
+    # city_id -> 聚合结果；dict 保持首次出现顺序，与 SpringBoot 的 LinkedHashMap 一致
+    regions = {}
+    for w in workers:
+        working = (w['working'] == 1)
+        if not working:
+            on_leave += 1
+        is_busy = working and busy_by_grid.get(w['emp_id'], 0) > 0
+        if is_busy:
+            busy += 1
+        key = w['city_id'] if w['city_id'] is not None else -1
+        region = regions.get(key)
+        if region is None:
+            region = {'provinceName': w['province_name'], 'cityName': w['city_name'],
+                      'total': 0, 'working': 0, 'busy': 0, 'idle': 0}
+            regions[key] = region
+        region['total'] += 1
+        if working:
+            region['working'] += 1
+            if is_busy:
+                region['busy'] += 1
+            else:
+                region['idle'] += 1
+
+    working_count = total - on_leave
+    idle = working_count - busy
+
+    pending_tasks = conn.execute(
+        'SELECT COUNT(*) AS n FROM aqi_feedback WHERE state = 0').fetchone()['n']
+    # 未处理的增员请求：与 GridDemandMapper.list 相同的排序（state ASC, demand_id DESC）
+    demands = conn.execute(GRID_DEMAND_SELECT + ' WHERE d.state = 0'
+                           ' ORDER BY d.state ASC, d.demand_id DESC').fetchall()
+
+    # 是否需增员：① 有未处理的增员请求（某区域一个在岗网格员都没有）；
+    #            ② 待指派任务量已超过“空闲网格员 × 人均承载上限”
+    capacity = WORKER_CAPACITY
+    demand_need = len(demands)
+    backlog_need = 0
+    if capacity > 0 and pending_tasks > idle * capacity:
+        extra = pending_tasks - idle * capacity
+        backlog_need = int(math.ceil(extra / float(capacity)))   # 向上取整，同 Math.ceil
+    suggest_add = demand_need + backlog_need
+
+    lack_regions = [{'provinceName': d['province_name'], 'cityName': d['city_name'],
+                     'reason': d['reason'], 'afId': d['af_id']} for d in demands]
+    # 给出“为什么需要增员”的可读依据，便于决策者直接判断
+    need_reasons = ['%s · %s 无在岗网格员，已提交增员请求（反馈 %s）' % (
+        d['province_name'], d['city_name'], '-' if d['af_id'] is None else d['af_id'])
+        for d in demands]
+    if backlog_need > 0:
+        need_reasons.append(
+            '待指派任务 %d 条，超出 %d 名空闲网格员按人均 %d 条的承载能力，建议增员 %d 人'
+            % (pending_tasks, idle, capacity, backlog_need))
+
+    return {
+        'total': total, 'working': working_count, 'onLeave': on_leave,
+        'busy': busy, 'idle': idle, 'capacity': capacity,
+        'pendingTasks': pending_tasks, 'pendingDemands': demand_need,
+        'suggestAdd': suggest_add, 'needMore': suggest_add > 0,
+        'needReasons': need_reasons, 'regions': list(regions.values()),
+        'lackRegions': lack_regions}, '查询成功'
+
+
+def java_round(x):
+    """Java Math.round(double)：四舍五入（.5 向上），Python round() 是银行家舍入，不能直接用"""
+    return int(math.floor(x + 0.5))
+
+
+def java_fmt_grade(value):
+    """Java String.format("%.1f", v)：对 double 的精确值做 HALF_UP 保留 1 位小数"""
+    return str(Decimal(float(value)).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
+
+
+def coverage_reason(working, cur, prev, avg_grade, measured):
+    """反馈“多/少”的原因判定，分支顺序与 SpringBoot DecisionStatsController#reasonOf 完全一致"""
+    if working == 0:
+        return '覆盖不足：该区域无在岗网格员，反馈少更可能是缺少检测覆盖而非环境良好'
+    good_air = avg_grade is not None and measured > 0 and avg_grade <= 2.0
+    if good_air and cur <= prev:
+        return '环境良好：已确认实测平均 AQI 等级 %s（优/良，样本 %d），反馈自然较少' % (
+            java_fmt_grade(avg_grade), measured)
+    if cur < prev:
+        return '反馈减少：该区域有在岗网格员，但反馈环比下降，需关注公众参与度（可能宣传/引导不足）'
+    if cur > prev:
+        return '反馈增加：环比上升，建议关注该区域空气质量与治理进展'
+    return '基本持平：需继续观察（该区域已确认的实测样本不足，暂无法判定为环境良好）'
+
+
+def api_stats_feedback_coverage(conn):
+    """反馈覆盖度环比分析：哪些城市反馈多/少，以及“少”是环境良好还是覆盖不足"""
+    today = datetime.now().date()
+    current_month = today.strftime('%Y-%m')
+    # 上月 = 本月第一天往前一天（等价于 Java 的 today.minusMonths(1)）
+    previous_month = (today.replace(day=1) - timedelta(days=1)).strftime('%Y-%m')
+
+    # 按城市 + 月份聚合本月/上月反馈数（af_date 为 'yyyy-MM-dd'，取前 7 位即月份）
+    rows = conn.execute('''
+        SELECT f.city_id, p.province_name, c.city_name,
+               substr(f.af_date, 1, 7) AS month, COUNT(*) AS cnt
+        FROM aqi_feedback f
+        JOIN grid_province p ON f.province_id = p.province_id
+        JOIN grid_city c ON f.city_id = c.city_id
+        WHERE f.af_date >= ?
+        GROUP BY f.city_id, p.province_name, c.city_name, substr(f.af_date, 1, 7)
+        ORDER BY f.city_id''', (previous_month + '-01',)).fetchall()
+
+    cities = []
+    city_by_id = {}
+    for r in rows:
+        city = city_by_id.get(r['city_id'])
+        if city is None:
+            city = {'provinceName': r['province_name'], 'cityName': r['city_name'],
+                    'cityId': r['city_id'], 'current': 0, 'previous': 0}
+            city_by_id[r['city_id']] = city
+            cities.append(city)
+        if r['month'] == current_month:
+            city['current'] += r['cnt']
+        elif r['month'] == previous_month:
+            city['previous'] += r['cnt']
+
+    working_by_city = {r['city_id']: r['cnt']
+                       for r in conn.execute(CITY_WORKING_SELECT).fetchall()}
+    avg_grade_by_city = {}
+    measured_by_city = {}
+    for r in conn.execute(CITY_AVG_GRADE_SELECT).fetchall():
+        avg_grade_by_city[r['city_id']] = r['avg_grade']
+        measured_by_city[r['city_id']] = r['measured']
+    pending_by_city = {r['city_id']: r['cnt']
+                       for r in conn.execute(CITY_PENDING_SELECT).fetchall()}
+
+    current_total = 0
+    previous_total = 0
+    for city in cities:
+        cur, prev = city['current'], city['previous']
+        current_total += cur
+        previous_total += prev
+        city_id = city['cityId']
+        working = working_by_city.get(city_id, 0)
+        avg_grade = avg_grade_by_city.get(city_id)
+        measured = measured_by_city.get(city_id, 0)
+        city['working'] = working
+        city['avgGrade'] = avg_grade
+        city['measured'] = measured
+        city['pendingTasks'] = pending_by_city.get(city_id, 0)
+        city['delta'] = cur - prev
+        city['deltaPercent'] = None if prev == 0 else java_round(
+            (cur - prev) * 1000.0 / prev) / 10.0
+        city['reason'] = coverage_reason(working, cur, prev, avg_grade, measured)
+
+    # 反馈“多/少”榜单：按本月反馈数降序取前 5；少榜即该排序的倒序前 5
+    ordered = sorted(cities, key=lambda c: c['current'], reverse=True)
+    more = ordered[:5]
+    less = list(reversed(ordered))[:5]
+
+    return {'currentMonth': current_month, 'previousMonth': previous_month,
+            'currentTotal': current_total, 'previousTotal': previous_total,
+            'cities': cities, 'more': more, 'less': less}, '查询成功'
 
 
 def chunk_reply(text, size=6):
@@ -1076,6 +1287,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.ok(data, msg)
         if method == 'GET' and path == '/stats/coverage':
             data, msg = api_stats_coverage(conn)
+            return self.ok(data, msg)
+        # 决策者（NEPV）看板
+        if method == 'GET' and path == '/stats/workforce':
+            data, msg = api_stats_workforce(conn)
+            return self.ok(data, msg)
+        if method == 'GET' and path == '/stats/feedbackCoverage':
+            data, msg = api_stats_feedback_coverage(conn)
             return self.ok(data, msg)
         # ---- AQI级别表 ----
         if method == 'GET' and path == '/aqi/list':

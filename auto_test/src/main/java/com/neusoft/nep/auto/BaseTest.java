@@ -301,11 +301,17 @@ public class BaseTest {
 
     /** 按按钮文字“包含”点击（用于含图标的按钮，如“查询”“提交申请”） */
     protected static void clickButtonByContainsText(String text) {
-        List<WebElement> buttons = driver.findElements(By.xpath("//button[contains(.,'" + text + "')]"));
-        for (WebElement b : buttons) {
+        findButtonByContainsText(text).click();
+    }
+
+    /**
+     * 按文字“包含”查找可见且可用的按钮（不点击）。
+     * 供 clickVerified 使用：关键动作（提交/指派）需要“点击后校验效果、未生效回退 JS 点击”。
+     */
+    protected static WebElement findButtonByContainsText(String text) {
+        for (WebElement b : driver.findElements(By.xpath("//button[contains(.,'" + text + "')]"))) {
             if (b.isDisplayed() && b.isEnabled()) {
-                b.click();
-                return;
+                return b;
             }
         }
         throw new NoSuchElementException("找不到可点击的按钮：" + text);

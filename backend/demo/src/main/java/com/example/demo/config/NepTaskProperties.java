@@ -18,4 +18,11 @@ public class NepTaskProperties {
     /** 已指派任务在该小时数内未提交实测数据，则自动回收重新进入“待指派”池 */
     @Value("${nep.task.repool-hours:24}")
     private long repoolHours = 24;
+
+    /**
+     * 单个网格员可同时承担的在办任务数上限（用于决策看板推算“是否需要增员”）。
+     * 当待指派任务数超过「空闲网格员数 × 该上限」时，说明人力不足。
+     */
+    @Value("${nep.task.worker-capacity:3}")
+    private int workerCapacity = 3;
 }
