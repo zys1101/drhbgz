@@ -2,6 +2,7 @@ package com.example.demo.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.example.demo.common.BusinessException;
+import com.example.demo.config.NepTaskProperties;
 import com.example.demo.entity.AqiData;
 import com.example.demo.entity.AqiFeedback;
 import com.example.demo.entity.Employee;
@@ -34,6 +35,7 @@ public class TaskServiceImpl implements ITaskService {
     private final AqiFeedbackMapper feedbackMapper;
     private final AqiDataMapper aqiDataMapper;
     private final EmployeeMapper employeeMapper;
+    private final NepTaskProperties taskProperties;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -173,6 +175,63 @@ public class TaskServiceImpl implements ITaskService {
     private void validateGrade(Integer grade, String name) {
         if (grade == null || grade < 1 || grade > 6) {
             throw new BusinessException("请完整录入" + name + "AQI浓度等级（1-6级）");
+        }
+    }
+
+    // ==================== 超时未接单自动回池 ====================
+
+    /**
+     * 已指派任务在该小时数内未提交实测数据，则自动回收重新进入“待指派”池。
+     * 阈值来自配置 nep.task.repool-hours，默认 24 小时。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int repoolTimedOutTasks() {
+        long repoolHours = taskProperties.getRepoolHours();
+        LocalDateTime deadline = LocalDateTime.now().minusHours(repoolHours);
+        // 只有“已指派(1)”才在池外等待接单；已提交实测(2)/已确认(3) 不回收
+        List<AqiFeedback> assigned = feedbackMapper.selectList(
+                new LambdaUpdateWrapper<AqiFeedback>().eq(AqiFeedback::getState, AqiFeedback.STATE_ASSIGNED));
+        int count = 0;
+        for (AqiFeedback f : assigned) {
+            LocalDateTime assignedAt = parseAssignTime(f);
+            if (assignedAt == null || assignedAt.isAfter(deadline)) {
+                continue;
+            }
+            String tip = "指派超过 " + repoolHours + " 小时未提交实测数据，已自动回收重新进入待指派池";
+            // 保留原有备注，追加回收说明，避免覆盖人工填写的内容
+            String old = f.getRemarks();
+            String remarks = (old == null || old.trim().isEmpty()) ? tip : old + "；" + tip;
+            LambdaUpdateWrapper<AqiFeedback> uw = new LambdaUpdateWrapper<>();
+            uw.eq(AqiFeedback::getAfId, f.getAfId())
+                    .set(AqiFeedback::getState, AqiFeedback.STATE_UNASSIGNED)
+                    .set(AqiFeedback::getGmId, null)
+                    .set(AqiFeedback::getAssignDate, null)
+                    .set(AqiFeedback::getAssignTime, null)
+                    .set(AqiFeedback::getRemarks, remarks);
+            feedbackMapper.update(null, uw);
+            count++;
+            log.info("任务{}超时未接单（指派于 {} {}），已回收重新进入待指派池",
+                    f.getAfId(), f.getAssignDate(), f.getAssignTime());
+        }
+        return count;
+    }
+
+    /** 解析反馈的指派时间（字段为 VARCHAR：assign_date=yyyy-MM-dd，assign_time=HH:mm:ss） */
+    private LocalDateTime parseAssignTime(AqiFeedback f) {
+        if (f.getAssignDate() == null || f.getAssignDate().isEmpty()) {
+            return null;
+        }
+        String time = (f.getAssignTime() == null || f.getAssignTime().isEmpty())
+                ? "00:00:00" : f.getAssignTime();
+        if (time.length() == 5) {
+            time = time + ":00";
+        }
+        try {
+            return LocalDateTime.parse(f.getAssignDate() + "T" + time);
+        } catch (Exception e) {
+            log.warn("任务{}的指派时间无法解析：{} {}", f.getAfId(), f.getAssignDate(), f.getAssignTime());
+            return null;
         }
     }
 }

@@ -223,6 +223,49 @@ def get_employee_by_code(conn, code):
     return conn.execute('SELECT * FROM employee WHERE emp_code = ?', (code,)).fetchone()
 
 
+# ---------------------------------------------------------------- 任务超时回池
+# 与 SpringBoot 端一致：已指派超过 REPOOL_HOURS 小时仍未提交实测数据 → 自动回到“待指派”池。
+# SpringBoot 用 @Scheduled 定时扫描，预览服务没有常驻调度线程，改为在每个请求入口
+# 先做一次轻量扫描（只查 state=1 的行），效果等价且可观测。
+REPOOL_HOURS = int(os.environ.get('NEP_REPOOL_HOURS', '24'))
+
+
+def repool_timed_out_tasks(conn):
+    """回收超时未接单的任务，返回回收条数"""
+    rows = conn.execute(
+        "SELECT af_id, assign_date, assign_time, remarks FROM aqi_feedback WHERE state = 1").fetchall()
+    if not rows:
+        return 0
+    deadline = datetime.now() - timedelta(hours=REPOOL_HOURS)
+    tip = '指派超过 %d 小时未提交实测数据，已自动回收重新进入待指派池' % REPOOL_HOURS
+    count = 0
+    for r in rows:
+        if not r['assign_date']:
+            continue
+        t = (r['assign_time'] or '00:00:00')
+        if len(t) == 5:
+            t += ':00'
+        try:
+            assigned_at = datetime.strptime('%s %s' % (r['assign_date'], t), '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            continue
+        if assigned_at > deadline:
+            continue
+        old = (r['remarks'] or '').strip()
+        remarks = tip if not old else old + '；' + tip   # 追加，不覆盖原有备注
+        conn.execute('UPDATE aqi_feedback SET state=0, gm_id=NULL, assign_date=NULL, '
+                     'assign_time=NULL, remarks=? WHERE af_id=?', (remarks, r['af_id']))
+        count += 1
+    if count:
+        conn.commit()
+    return count
+
+
+def api_repool(conn):
+    n = repool_timed_out_tasks(conn)
+    return n, ('已回收 %d 条超时任务' % n) if n else '没有超时未接单的任务'
+
+
 def require_grid_worker(conn, grid_code):
     emp = get_employee_by_code(conn, grid_code)
     if emp is None or emp['role'] != 'grid':
@@ -801,6 +844,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({'code': 500, 'message': '操作失败', 'data': str(e)})
 
     def dispatch(self, conn, method, path, qs, body, is_api=False):
+        # 每个请求入口先做一次超时任务回收扫描（等价于 SpringBoot 的定时任务）。
+        # 手动触发接口 /task/repool 本身要返回“本次回收了几条”，因此跳过前置扫描，
+        # 否则数量会被这里提前回收掉，接口永远返回 0。
+        if path != '/task/repool':
+            try:
+                repool_timed_out_tasks(conn)
+            except Exception:  # noqa
+                pass
         # ---- 认证 ----
         if method == 'POST' and path == '/auth/register':
             _, msg = api_register(conn, body)
@@ -889,6 +940,9 @@ class Handler(BaseHTTPRequestHandler):
         if method == 'POST' and path == '/task/measure':
             data, msg = api_measure(conn, body)
             return self.ok(data, msg)
+        if method == 'POST' and path == '/task/repool':
+            n, msg = api_repool(conn)
+            return self.ok(n, msg)
         # ---- 确认AQI数据 ----
         if method == 'GET' and path == '/aqiData/list':
             rows = conn.execute(AQI_DATA_SELECT + ' ORDER BY d.data_id DESC').fetchall()
@@ -1034,7 +1088,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     init_db()
-    host, port = '0.0.0.0', 9000
+    host = os.environ.get('NEP_HOST', '0.0.0.0')
+    port = int(os.environ.get('NEP_PORT', '9000'))   # 可用 NEP_PORT 覆盖，便于与本机正式后端同时运行
     server = ThreadingHTTPServer((host, port), Handler)
     print('[preview] 东软环保公众监督系统 预览服务已启动: http://%s:%d/api' % (host, port))
     print('[preview] 注意：正式后端为 backend/demo (SpringBoot)，本服务仅用于沙箱在线预览')

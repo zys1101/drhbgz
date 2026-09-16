@@ -25,4 +25,12 @@ public interface ITaskService {
 
     /** 管理员退回异常实测数据（任务重新变为待指派） */
     void reject(Integer dataId);
+
+    /**
+     * 回收超时未接单的任务：已指派超过配置时长（nep.task.repool-hours）
+     * 仍未提交实测数据的任务，自动回到“待指派”池。
+     *
+     * @return 本次回收的任务数
+     */
+    int repoolTimedOutTasks();
 }

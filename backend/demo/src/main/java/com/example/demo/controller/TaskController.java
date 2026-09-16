@@ -64,6 +64,17 @@ public class TaskController {
         return new ResultVO(200, "提交成功", data);
     }
 
+    /**
+     * 回收超时未接单任务（管理员手动触发；平时由 TaskRepoolScheduler 定时自动执行）
+     * 规则：已指派超过 nep.task.repool-hours（默认 24 小时）仍未提交实测数据 → 回到“待指派”
+     */
+    @PostMapping("/repool")
+    @Operation(summary = "回收超时未接单任务")
+    public ResultVO repool() {
+        int n = taskService.repoolTimedOutTasks();
+        return new ResultVO(200, n > 0 ? "已回收 " + n + " 条超时任务" : "没有超时未接单的任务", n);
+    }
+
     private Integer toInt(Object v) {
         if (v == null || "".equals(v)) {
             return null;

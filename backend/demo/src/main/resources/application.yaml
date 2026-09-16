@@ -49,3 +49,11 @@ mybatis-plus:
     # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     banner: false
+
+# 业务规则配置
+nep:
+  task:
+    # 已指派任务在该小时数内未提交实测数据，则自动回收重新进入“待指派”池
+    repool-hours: 24
+    # 扫描间隔（毫秒），默认 5 分钟
+    repool-scan-interval: 300000
