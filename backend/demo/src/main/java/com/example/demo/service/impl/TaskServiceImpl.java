@@ -55,6 +55,13 @@ public class TaskServiceImpl implements ITaskService {
         if (worker.getWorking() == null || worker.getWorking() != 1) {
             throw new BusinessException("该网格员当前处于非工作状态（请假/人员管理维护）");
         }
+        // 业务规则：只允许本地指派。若该反馈所在网格区域没有可工作的本地网格员，
+        // 应改为发起“增员请求”（POST /api/gridDemand/apply），而不是派给其它区域的网格员。
+        boolean local = java.util.Objects.equals(worker.getProvinceId(), feedback.getProvinceId())
+                && java.util.Objects.equals(worker.getCityId(), feedback.getCityId());
+        if (!local) {
+            throw new BusinessException("该网格区域无可工作的本地网格员，不允许异地指派；请发起“增员请求”");
+        }
         LocalDateTime now = LocalDateTime.now();
         feedback.setGmId(worker.getEmpId());
         feedback.setAssignDate(now.format(DATE_FMT));

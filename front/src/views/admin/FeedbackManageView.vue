@@ -130,28 +130,39 @@
           <span class="assign-addr">{{ assignItem.address }}</span>
         </div>
 
-        <el-alert :title="assignModeText" :type="localWorkers.length ? 'success' : 'warning'" :closable="false"
+        <!-- 指派规则：只允许本地指派（省+市一致）；名单未就绪时不提前给出结论 -->
+        <el-alert v-if="workersLoading" title="正在加载网格员名单…" type="info" :closable="false"
           style="margin-bottom: 14px" />
+        <el-alert v-else-if="localWorkers.length" :title="assignModeText" type="success" :closable="false"
+          style="margin-bottom: 14px" />
+        <el-alert v-else title="该网格区域没有可工作的本地网格员，不允许异地指派，请发起增员请求" type="warning"
+          :closable="false" style="margin-bottom: 14px" />
 
-        <div class="worker-list">
-          <label v-for="w in orderedWorkers" :key="w.gridCode" class="worker-item"
-            :class="{ selected: chosenWorker === w.gridCode, disabled: !w.working, local: w.region === assignRegion }">
-            <input v-model="chosenWorker" type="radio" :value="w.gridCode" :disabled="!w.working" class="worker-radio">
+        <!-- 仅列出本地（本网格区域）可工作的网格员，异地网格员不作为可选项 -->
+        <div v-if="!workersLoading && localWorkers.length" class="worker-list">
+          <label v-for="w in localWorkers" :key="w.gridCode" class="worker-item"
+            :class="{ selected: chosenWorker === w.gridCode, local: w.region === assignRegion }">
+            <input v-model="chosenWorker" type="radio" :value="w.gridCode" class="worker-radio">
             <div class="worker-avatar">{{ w.realName ? w.realName.charAt(0) : '?' }}</div>
             <div class="worker-meta">
               <span class="worker-name">{{ w.realName }} <code>{{ w.gridCode }}</code></span>
               <span class="worker-region">{{ w.region }}</span>
             </div>
-            <span v-if="w.region === assignRegion" class="local-tag">本地</span>
-            <el-tag v-if="!w.working" type="info" size="small" effect="plain">非工作状态</el-tag>
+            <span class="local-tag">本地</span>
           </label>
         </div>
       </template>
       <template #footer>
         <el-button @click="assignVisible = false">取消</el-button>
-        <el-button type="primary" class="nep-btn-gradient" :disabled="!chosenWorker" :loading="assigning2"
-          @click="confirmAssign">
+        <!-- 无本地可工作网格员时，确认指派保持禁用 -->
+        <el-button type="primary" class="nep-btn-gradient" :disabled="!localWorkers.length || !chosenWorker"
+          :loading="assigning2" @click="confirmAssign">
           <i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>确认指派
+        </el-button>
+        <!-- 本地无人可派：改为主推“申请增员”，交由管理员/决策者跟进 -->
+        <el-button v-if="!workersLoading && !localWorkers.length" type="primary" class="nep-btn-gradient"
+          :loading="applyingDemand" @click="applyDemand">
+          <i class="fa-solid fa-user-plus" style="margin-right:6px"></i>申请增员
         </el-button>
       </template>
     </el-dialog>
@@ -165,6 +176,7 @@ import GradeTag from '../../components/GradeTag.vue'
 import StateTag from '../../components/StateTag.vue'
 import { getAqiFeedbackList, deleteByAfid } from '../../api/aqiFeedback'
 import { assignTask, getGridWorkers } from '../../api/task'
+import { applyGridDemand } from '../../api/gridDemand'
 import { AQI_GRADES, FEEDBACK_STATES } from '../../constants/aqi'
 
 export default {
@@ -189,8 +201,10 @@ export default {
       detailVisible: false,
       assignVisible: false,
       assigning2: false,
+      applyingDemand: false, // 增员请求提交中
       assignItem: null,
       workers: [],
+      workersLoading: false, // 网格员名单加载中（避免误报“本地无人”）
       chosenWorker: '',
       gradeOptions: AQI_GRADES,
       stateOptions: FEEDBACK_STATES
@@ -206,19 +220,8 @@ export default {
       return this.workers.filter(w => w.region === this.assignRegion && w.working)
     },
     assignModeText() {
-      if (this.localWorkers.length) {
-        return '本地指派：当前网格区域有 ' + this.localWorkers.length + ' 名可工作的网格员（已置顶显示）'
-      }
-      return '异地指派：当前网格区域暂无可工作的网格员，已按就近原则列出其它区域网格员'
-    },
-    orderedWorkers() {
-      // 本地指派优先，异地（其它区域）按就近原则排后
-      return [...this.workers].sort((a, b) => {
-        const localA = a.region === this.assignRegion ? 0 : 1
-        const localB = b.region === this.assignRegion ? 0 : 1
-        if (localA !== localB) return localA - localB
-        return (b.working ? 1 : 0) - (a.working ? 1 : 0)
-      })
+      // 仅本地指派：可选项只有本网格区域可工作的网格员
+      return '本地指派：当前网格区域有 ' + this.localWorkers.length + ' 名可工作的网格员，请选择一名指派'
     },
     filteredList() {
       const f = this.applied || { keyword: '', grade: '', state: '', dateFrom: '', dateTo: '' }
@@ -266,8 +269,16 @@ export default {
       }
     },
     async loadWorkers() {
-      const res = await getGridWorkers()
-      this.workers = res.list
+      this.workersLoading = true
+      try {
+        const res = await getGridWorkers()
+        this.workers = res.list
+      } catch (err) {
+        console.error(err)
+        ElMessage.error('获取网格员名单失败，请稍后重试')
+      } finally {
+        this.workersLoading = false
+      }
     },
     applyFilter() {
       this.applied = {
@@ -300,11 +311,8 @@ export default {
       this.assigning2 = true
       try {
         const res = await assignTask(this.assignItem.afId, this.chosenWorker, this.assignItem)
-        const worker = this.workers.find(w => w.gridCode === this.chosenWorker)
-        const isLocal = worker && worker.region === this.assignRegion
-        ElMessage.success(
-          (isLocal ? '本地指派' : '异地指派') + '成功，已通知网格员' + (res.mock ? '（演示数据）' : '')
-        )
+        // 可选项只来自本地网格员，故此处必为本地指派
+        ElMessage.success('本地指派成功，已通知网格员' + (res.mock ? '（演示数据）' : ''))
         this.assignVisible = false
         // 从后端刷新列表，获取最新状态（后端未连接时保留本地状态变更）
         this.fetchList()
@@ -313,6 +321,28 @@ export default {
         ElMessage.error((err && err.message) || '指派失败，请重试')
       } finally {
         this.assigning2 = false
+      }
+    },
+    // 该区域无可工作的本地网格员、又不允许异地指派时，发起增员请求
+    async applyDemand() {
+      if (!this.assignItem) return
+      this.applyingDemand = true
+      try {
+        const res = await applyGridDemand({ afId: this.assignItem.afId })
+        const body = (res && res.data) || {}
+        if (body.code === 200) {
+          // 无论是“已提交”还是“该区域已有待处理请求”，均提示后端返回的消息
+          ElMessage.success(body.message || '增员请求已提交')
+          this.assignVisible = false
+          this.fetchList()
+        } else {
+          ElMessage.error(body.message || '申请增员失败')
+        }
+      } catch (err) {
+        console.error(err)
+        ElMessage.error((err && err.message) || '申请增员失败')
+      } finally {
+        this.applyingDemand = false
       }
     },
     handleDelete(item) {

@@ -712,4 +712,36 @@ public class BaseTest {
         } catch (InterruptedException ignored) {
         }
     }
+
+    // ============ 通过页面上下文调用后端接口 ============
+    // 用例需要“按后端真实数据”决定操作对象（例如本地指派要求网格员与反馈同区域），
+    // 直接读接口比在页面上猜更可靠。这里借助页面同源 fetch + 前端 /api 代理取 JSON。
+
+    /** 在页面上下文同步等待 fetch 完成并返回响应文本（跨域/CORS 由同源代理规避） */
+    protected static String apiGetRaw(String path) {
+        Object r = ((JavascriptExecutor) driver).executeAsyncScript(
+                "var cb = arguments[arguments.length - 1];"
+                        + "fetch(arguments[0], {headers: {'Accept': 'application/json'}})"
+                        + "  .then(function (res) { return res.text(); })"
+                        + "  .then(function (t) { cb(t); })"
+                        + "  .catch(function (e) { cb(''); });",
+                path);
+        return r == null ? "" : String.valueOf(r);
+    }
+
+    /** 调用 GET 接口并按 ResultVO 结构解析为 Map（需页面已加载被测系统，保证同源） */
+    protected static java.util.Map<String, Object> apiGet(String path) {
+        String text = apiGetRaw(path);
+        if (text == null || text.isEmpty()) {
+            throw new IllegalStateException("接口无响应：" + path + "（页面是否已打开被测系统？）");
+        }
+        return new org.openqa.selenium.json.Json().toType(text, java.util.Map.class);
+    }
+
+    /** 调用 GET 接口并返回 data 数组（元素为 Map） */
+    @SuppressWarnings("unchecked")
+    protected static List<java.util.Map<String, Object>> apiList(String path) {
+        Object data = apiGet(path).get("data");
+        return data instanceof List ? (List<java.util.Map<String, Object>>) data : new java.util.ArrayList<>();
+    }
 }

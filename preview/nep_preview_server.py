@@ -67,11 +67,17 @@ def init_db():
           reason TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL,
           state INTEGER NOT NULL DEFAULT 0, apply_date TEXT, apply_time TEXT,
           approve_date TEXT, approve_time TEXT)''')
+        # 网格员增员请求表（本地无可用网格员时由管理员发起）
+        c.execute('''CREATE TABLE IF NOT EXISTS grid_demand (
+          demand_id INTEGER PRIMARY KEY AUTOINCREMENT, province_id INTEGER NOT NULL,
+          city_id INTEGER NOT NULL, af_id INTEGER, reason TEXT,
+          state INTEGER NOT NULL DEFAULT 0, apply_date TEXT, apply_time TEXT,
+          handle_date TEXT, handle_time TEXT, handle_remark TEXT)''')
         if not c.execute('SELECT 1 FROM leave LIMIT 1').fetchone():
             _seed_leaves(c, seed)
         conn.commit()
         conn.close()
-        print('[preview] 已补齐人员管理（请假）结构，保留原数据')
+        print('[preview] 已补齐人员管理（请假）与增员请求结构，保留原数据')
         return
     c.executescript('''
     CREATE TABLE grid_province (province_id INTEGER PRIMARY KEY, province_name TEXT NOT NULL);
@@ -141,6 +147,13 @@ def init_db():
       state INTEGER NOT NULL DEFAULT 0, apply_date TEXT, apply_time TEXT,
       approve_date TEXT, approve_time TEXT)''')
     _seed_leaves(c, seed)
+    # 网格员增员请求表（本地无可用网格员时的增员请求）
+    # 与 leave 一样用 IF NOT EXISTS 幂等补建，已存在的旧库也能自动升级
+    c.execute('''CREATE TABLE IF NOT EXISTS grid_demand (
+      demand_id INTEGER PRIMARY KEY AUTOINCREMENT, province_id INTEGER NOT NULL,
+      city_id INTEGER NOT NULL, af_id INTEGER, reason TEXT,
+      state INTEGER NOT NULL DEFAULT 0, apply_date TEXT, apply_time TEXT,
+      handle_date TEXT, handle_time TEXT, handle_remark TEXT)''')
     conn.commit()
     conn.close()
     print('[preview] 种子数据载入完成：省%d 市%d 反馈%d 实测%d 请假%d' % (
@@ -264,6 +277,80 @@ def repool_timed_out_tasks(conn):
 def api_repool(conn):
     n = repool_timed_out_tasks(conn)
     return n, ('已回收 %d 条超时任务' % n) if n else '没有超时未接单的任务'
+
+
+# ---------------------------------------------------------------- 网格员增员请求
+def has_local_working_worker(conn, province_id, city_id):
+    """该网格区域是否存在可工作的本地网格员"""
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM employee WHERE role='grid' AND working=1 "
+        "AND province_id=? AND city_id=?", (province_id, city_id)).fetchone()
+    return row['n'] > 0
+
+
+def api_grid_demand_apply(conn, body):
+    af_id = int(body.get('afId') or 0)
+    fb = conn.execute('SELECT * FROM aqi_feedback WHERE af_id=?', (af_id,)).fetchone()
+    if fb is None:
+        raise BizError(400, '反馈数据不存在')
+    if has_local_working_worker(conn, fb['province_id'], fb['city_id']):
+        raise BizError(400, '该网格区域已有可工作的网格员，请直接本地指派')
+    exist = conn.execute(
+        "SELECT * FROM grid_demand WHERE state=0 AND province_id=? AND city_id=? LIMIT 1",
+        (fb['province_id'], fb['city_id'])).fetchone()
+    if exist is not None:
+        return row_to_camel(exist), '该网格区域已有待处理的增员请求（编号 %d）' % exist['demand_id']
+
+    city = conn.execute('SELECT city_name FROM grid_city WHERE city_id=?',
+                        (fb['city_id'],)).fetchone()
+    city_name = city['city_name'] if city else str(fb['city_id'])
+    reason = body.get('reason') or (
+        '网格区域【%s】无可工作的本地网格员，反馈任务无法指派，申请增加网格员' % city_name)
+    d, t = now_strs()
+    cur = conn.execute(
+        'INSERT INTO grid_demand (province_id, city_id, af_id, reason, state, apply_date, apply_time)'
+        ' VALUES (?,?,?,?,0,?,?)', (fb['province_id'], fb['city_id'], af_id, reason, d, t))
+    conn.commit()
+    row = conn.execute('SELECT * FROM grid_demand WHERE demand_id=?', (cur.lastrowid,)).fetchone()
+    return row_to_camel(row), '已提交增员请求，等待决策者/管理员处理'
+
+
+GRID_DEMAND_SELECT = '''
+SELECT d.*, p.province_name, c.city_name
+FROM grid_demand d
+LEFT JOIN grid_province p ON d.province_id = p.province_id
+LEFT JOIN grid_city c ON d.city_id = c.city_id
+'''
+
+
+def api_grid_demand_list(conn, qs):
+    conds, params = ['1=1'], []
+    if qs.get('state'):
+        conds.append('d.state = ?')
+        params.append(int(qs['state']))
+    if qs.get('cityId'):
+        conds.append('d.city_id = ?')
+        params.append(int(qs['cityId']))
+    rows = conn.execute(GRID_DEMAND_SELECT + ' WHERE ' + ' AND '.join(conds) +
+                        ' ORDER BY d.state ASC, d.demand_id DESC', params).fetchall()
+    return rows_to_camel(rows), '查询成功'
+
+
+def api_grid_demand_handle(conn, body):
+    demand_id = int(body.get('demandId') or 0)
+    row = conn.execute('SELECT * FROM grid_demand WHERE demand_id=?', (demand_id,)).fetchone()
+    if row is None:
+        raise BizError(400, '增员请求不存在')
+    if row['state'] != 0:
+        raise BizError(400, '该请求已处理，不能重复处理')
+    state = int(body.get('state') if body.get('state') is not None else 1)
+    if state not in (1, 2):
+        raise BizError(400, '处理结果只能是“已处理”或“已忽略”')
+    d, t = now_strs()
+    conn.execute('UPDATE grid_demand SET state=?, handle_date=?, handle_time=?, handle_remark=? '
+                 'WHERE demand_id=?', (state, d, t, body.get('remark'), demand_id))
+    conn.commit()
+    return True, ('已标记为已处理' if state == 1 else '已忽略该请求')
 
 
 def require_grid_worker(conn, grid_code):
@@ -394,6 +481,9 @@ def api_assign(conn, body):
     emp = require_grid_worker(conn, grid_code)
     if emp['working'] != 1:
         raise BizError(400, '该网格员当前处于非工作状态（请假/人员管理维护）')
+    # 业务规则：只允许本地指派。本地无可用网格员时应发起“增员请求”。
+    if emp['province_id'] != fb['province_id'] or emp['city_id'] != fb['city_id']:
+        raise BizError(400, '该网格区域无可工作的本地网格员，不允许异地指派；请发起“增员请求”')
     d, t = now_strs()
     conn.execute('UPDATE aqi_feedback SET gm_id=?, assign_date=?, assign_time=?, state=1 WHERE af_id=?',
                  (emp['emp_id'], d, t, af_id))
@@ -943,6 +1033,16 @@ class Handler(BaseHTTPRequestHandler):
         if method == 'POST' and path == '/task/repool':
             n, msg = api_repool(conn)
             return self.ok(n, msg)
+        # ---- 网格员增员请求 ----
+        if method == 'POST' and path == '/gridDemand/apply':
+            data, msg = api_grid_demand_apply(conn, body)
+            return self.ok(data, msg)
+        if method == 'GET' and path == '/gridDemand/list':
+            data, msg = api_grid_demand_list(conn, qs)
+            return self.ok(data, msg)
+        if method == 'POST' and path == '/gridDemand/handle':
+            _, msg = api_grid_demand_handle(conn, body)
+            return self.ok(True, msg)
         # ---- 确认AQI数据 ----
         if method == 'GET' and path == '/aqiData/list':
             rows = conn.execute(AQI_DATA_SELECT + ' ORDER BY d.data_id DESC').fetchall()

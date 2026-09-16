@@ -122,6 +122,23 @@ CREATE TABLE `leave` (
   KEY `idx_leave_emp` (`emp_id`),
   KEY `idx_leave_state` (`state`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='网格员请假表';
+-- 9. 网格员增员请求表（本地无可用网格员时由管理员发起，决策者据此判断是否增员）
+CREATE TABLE `grid_demand` (
+  `demand_id` INT NOT NULL AUTO_INCREMENT COMMENT '增员请求编号',
+  `province_id` INT NOT NULL COMMENT '缺员省编号',
+  `city_id` INT NOT NULL COMMENT '缺员市编号',
+  `af_id` INT DEFAULT NULL COMMENT '来源反馈编号(可空)',
+  `reason` VARCHAR(200) DEFAULT NULL COMMENT '缺员说明',
+  `state` INT NOT NULL DEFAULT 0 COMMENT '状态: 0待处理 1已处理 2已忽略',
+  `apply_date` VARCHAR(10) DEFAULT NULL COMMENT '申请日期',
+  `apply_time` VARCHAR(8) DEFAULT NULL COMMENT '申请时间',
+  `handle_date` VARCHAR(10) DEFAULT NULL COMMENT '处理日期',
+  `handle_time` VARCHAR(8) DEFAULT NULL COMMENT '处理时间',
+  `handle_remark` VARCHAR(200) DEFAULT NULL COMMENT '处理说明',
+  PRIMARY KEY (`demand_id`),
+  KEY `idx_demand_state` (`state`),
+  KEY `idx_demand_city` (`city_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='网格员增员请求';
 
 -- ---------------- 种子数据 ----------------
 INSERT INTO `grid_province` (`province_id`,`province_name`) VALUES

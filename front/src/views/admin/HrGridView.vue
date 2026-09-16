@@ -1,6 +1,6 @@
 <template>
   <div class="nep-page">
-    <el-tabs v-model="activeTab">
+    <el-tabs v-model="activeTab" @tab-change="onTabChange">
       <!-- ============ 网格员管理 ============ -->
       <el-tab-pane label="网格员管理" name="grid">
         <div class="nep-card">
@@ -105,6 +105,67 @@
           </div>
         </div>
       </el-tab-pane>
+
+      <!-- ============ 增员请求 ============ -->
+      <el-tab-pane label="增员请求" name="demand">
+        <div class="nep-card">
+          <div class="nep-card-header">
+            <div>
+              <h2 class="nep-card-title">
+                <span class="nep-title-icon"><i class="fa-solid fa-user-plus"></i></span>
+                增员请求
+              </h2>
+              <p class="nep-card-sub">网格区域没有可工作的本地网格员、又不允许异地指派时由管理员发起；处理结果作为决策者判断是否需要增员的依据</p>
+            </div>
+            <div class="header-actions">
+              <el-select v-model="demandStateFilter" placeholder="处理状态" clearable style="width: 140px"
+                @change="fetchDemands">
+                <el-option v-for="s in demandStateOptions" :key="s.value" :label="s.label" :value="s.value" />
+              </el-select>
+              <el-button :icon="Refresh" circle @click="fetchDemands" />
+            </div>
+          </div>
+
+          <div class="nep-table-wrap">
+            <el-table v-loading="demandLoading" :data="demands" style="width: 100%"
+              :header-cell-style="{ background: '#f8faf9' }">
+              <el-table-column label="省份 / 城市" min-width="150">
+                <template #default="{ row }">{{ row.provinceName }} · {{ row.cityName }}</template>
+              </el-table-column>
+              <el-table-column label="来源反馈" width="100" align="center">
+                <template #default="{ row }">
+                  <span v-if="row.afId">{{ row.afId }}</span>
+                  <span v-else class="muted">—</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="reason" label="缺员说明" min-width="220" show-overflow-tooltip />
+              <el-table-column label="申请时间" width="165">
+                <template #default="{ row }">{{ row.applyDate }} {{ row.applyTime }}</template>
+              </el-table-column>
+              <el-table-column label="状态" width="110" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="demandTagType(row.state)" effect="light">{{ demandStateText(row.state) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="处理时间" width="165">
+                <template #default="{ row }">
+                  <span v-if="row.handleDate" class="muted">{{ row.handleDate }} {{ row.handleTime }}</span>
+                  <span v-else class="muted">—</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="150" align="center">
+                <template #default="{ row }">
+                  <template v-if="row.state === 0">
+                    <el-button link type="success" @click="handleDemand(row, 1)">已处理</el-button>
+                    <el-button link type="danger" @click="handleDemand(row, 2)">忽略</el-button>
+                  </template>
+                  <span v-else class="muted">—</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <!-- 新增 / 编辑网格员 -->
@@ -173,6 +234,7 @@ import {
   getEmployeeList, saveEmployee, updateEmployee,
   getLeaveList, approveLeave, backLeave
 } from '../../api/hr'
+import { getGridDemandList, handleGridDemand } from '../../api/gridDemand'
 
 // 请假状态：label / el-tag type
 const LEAVE_STATES = {
@@ -180,6 +242,13 @@ const LEAVE_STATES = {
   1: ['已同意·请假中', 'danger'],
   2: ['已驳回', 'info'],
   3: ['已销假', 'success']
+}
+
+// 增员请求状态：label / el-tag type
+const DEMAND_STATES = {
+  0: ['待处理', 'warning'],
+  1: ['已处理', 'success'],
+  2: ['已忽略', 'info']
 }
 
 export default {
@@ -200,17 +269,24 @@ export default {
       empLeaveLoading: false,
       leaveLoading: false,
       leaves: [],
-      leaveStateFilter: null
+      leaveStateFilter: null,
+      demandLoading: false,
+      demands: [],
+      demandStateFilter: null
     }
   },
   computed: {
     leaveStateOptions() {
       return Object.entries(LEAVE_STATES).map(([value, [label]]) => ({ value: Number(value), label }))
+    },
+    demandStateOptions() {
+      return Object.entries(DEMAND_STATES).map(([value, [label]]) => ({ value: Number(value), label }))
     }
   },
   created() {
     this.fetchEmployees()
     this.fetchLeaves()
+    this.fetchDemands()
     getProvinces().then(res => {
       if (res.data.code === 200) this.provinces = res.data.data
     }).catch(() => {})
@@ -222,6 +298,14 @@ export default {
     },
     leaveTagType(state) {
       const item = LEAVE_STATES[state]
+      return item ? item[1] : 'info'
+    },
+    demandStateText(state) {
+      const item = DEMAND_STATES[state]
+      return item ? item[0] : '未知'
+    },
+    demandTagType(state) {
+      const item = DEMAND_STATES[state]
       return item ? item[1] : 'info'
     },
     async fetchEmployees() {
@@ -256,6 +340,50 @@ export default {
       } finally {
         this.leaveLoading = false
       }
+    },
+    // 增员请求列表（可按处理状态筛选）
+    async fetchDemands() {
+      this.demandLoading = true
+      try {
+        const params = this.demandStateFilter != null ? { state: this.demandStateFilter } : {}
+        const res = await getGridDemandList(params)
+        if (res.data.code === 200) {
+          this.demands = res.data.data || []
+        } else {
+          ElMessage.error(res.data.message || '获取增员请求失败')
+        }
+      } catch (err) {
+        console.error(err)
+        ElMessage.error('网络异常，请确认后端服务已启动')
+      } finally {
+        this.demandLoading = false
+      }
+    },
+    // 切到“增员请求”页签时刷新，保证看到最新的待处理请求
+    onTabChange(name) {
+      if (name === 'demand') this.fetchDemands()
+    },
+    // 处理增员请求：1 已处理（已增员） / 2 已忽略
+    handleDemand(row, state) {
+      const action = state === 1 ? '已处理' : '忽略'
+      ElMessageBox.confirm(
+        `确定将「${row.provinceName} · ${row.cityName}」的增员请求标记为「${action}」吗？`,
+        '处理增员请求',
+        { confirmButtonText: action, cancelButtonText: '取消', type: 'warning' }
+      ).then(async () => {
+        try {
+          const res = await handleGridDemand({ demandId: row.demandId, state })
+          if (res.data.code === 200) {
+            ElMessage.success(res.data.message || '处理完成')
+            this.fetchDemands()
+          } else {
+            ElMessage.error(res.data.message || '处理失败')
+          }
+        } catch (err) {
+          console.error(err)
+          ElMessage.error('网络异常，请确认后端服务已启动')
+        }
+      }).catch(() => {})
     },
     openCreate() {
       this.editForm = { empCode: '', realName: '', password: '', provinceId: null, cityId: null }

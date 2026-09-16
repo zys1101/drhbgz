@@ -71,9 +71,18 @@ function demoMeasured() {
 // 指派网格员（用例3-10）：优先调用后端，未连接时写本地演示记录
 export async function assignTask(afId, gridCode, feedback) {
   try {
-    await request.post('/task/assign', { afId, gridCode })
-    return { mock: false }
+    const res = await request.post('/task/assign', { afId, gridCode })
+    // 后端业务校验失败是 HTTP 200 + body.code!=200（GlobalExceptionHandler），
+    // axios 不会抛异常，必须显式判断——否则“不允许异地指派/网格员非工作状态”等
+    // 拒绝会被静默当成成功（界面提示指派成功，实际没指派）。
+    if (res.data && res.data.code !== 200) {
+      throw new Error(res.data.message || '指派失败')
+    }
+    return { mock: false, message: res.data && res.data.message }
   } catch (err) {
+    // 业务错误（我们自己抛的 Error，不是 axios 异常）直接上抛，
+    // 不能让 isNetworkError 把“无 response”误判成网络故障而走演示降级
+    if (err && !err.isAxiosError) throw err
     if (isNetworkError(err)) {
       const list = lsGet(ASSIGN_KEY)
       list.push({
