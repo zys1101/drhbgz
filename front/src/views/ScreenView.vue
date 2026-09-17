@@ -144,6 +144,33 @@
             </div>
           </div>
 
+          <!-- 待增援区域：有任务却无在岗网格员，决策者可直接提交增援申请 -->
+          <div v-if="workforce.needWorkerRegions.length" class="sub-block">
+            <div class="sub-label">待增援区域（{{ workforce.needWorkerRegions.length }}）</div>
+            <div class="demand-list">
+              <div
+                v-for="r in workforce.needWorkerRegions"
+                :key="r.provinceId + '-' + r.cityId"
+                class="demand-item"
+              >
+                <span class="demand-region">
+                  <i class="fa-solid fa-location-dot"></i>{{ regionName(r) }}
+                  <em>待指派 {{ r.pendingTasks }} 条</em>
+                </span>
+                <el-tag v-if="r.hasDemand" type="warning" size="small" effect="plain">
+                  已提交待处理 #{{ r.demandId }}
+                </el-tag>
+                <el-button
+                  v-else
+                  type="primary"
+                  size="small"
+                  :loading="applyingRegion === r.cityId"
+                  @click="submitDemand(r)"
+                >提交增援申请</el-button>
+              </div>
+            </div>
+          </div>
+
           <!-- 各区域人力分布（前 8 个区域） -->
           <div v-if="workforce.regions.length" class="sub-block chart-block">
             <div class="sub-label">各区域在岗 / 忙碌人数（前 {{ workforceRegions.length }} 个区域）</div>
@@ -236,12 +263,14 @@
 
 <script>
 import VChart from '../components/VChart.vue'
+import { ElMessage } from 'element-plus'
 import { roleHome } from '../constants/aqi'
 import {
   getProvinceStats, getDistributionStats, getTrendStats,
   getRealtimeStats, getCoverageStats,
   getWorkforce, getFeedbackCoverage
 } from '../api/stats'
+import { applyGridDemand } from '../api/gridDemand'
 
 const DARK_TEXT = 'rgba(255,255,255,0.75)'
 
@@ -279,8 +308,10 @@ export default {
         mock: false,
         total: 0, working: 0, onLeave: 0, busy: 0, idle: 0, capacity: 0,
         pendingTasks: 0, pendingDemands: 0, suggestAdd: 0, needMore: false,
-        needReasons: [], regions: [], lackRegions: []
+        needReasons: [], regions: [], lackRegions: [], needWorkerRegions: []
       },
+      // 正在提交增援申请的区域 cityId（用于按钮 loading）
+      applyingRegion: null,
       // 板块二：反馈覆盖度环比（后端 /stats/feedbackCoverage）
       feedbackCoverage: {
         mock: false,
@@ -291,6 +322,13 @@ export default {
     }
   },
   methods: {
+    /**
+     * 刷新决策依据数据（网格员人力 + 反馈覆盖度环比）。
+     * 实际取数逻辑在 options 层的 loadDecisionData（created 与本方法共用，避免复制两份）。
+     */
+    async refreshDecisionData() {
+      return this.$options.loadDecisionData.call(this)
+    },
     exitScreen() {
       const role = this.$store.getters.role
       if (role === 'viewer') {
@@ -308,6 +346,34 @@ export default {
       const city = r.cityName || r.city || ''
       const name = `${province} ${city}`.trim()
       return name || '未知区域'
+    },
+    /**
+     * 决策者直接提交增援申请。
+     * 大屏上看不到具体反馈，因此按“区域”提交，后端会自动关联该区域最早的待指派反馈；
+     * 同一区域已有待处理请求时后端会复用并返回原请求编号。
+     * 注意：后端业务错误是 HTTP 200 + body.code != 200，必须显式判断 code。
+     */
+    async submitDemand(region) {
+      if (!region || this.applyingRegion) return
+      this.applyingRegion = region.cityId
+      try {
+        const res = await applyGridDemand({
+          provinceId: region.provinceId,
+          cityId: region.cityId,
+          source: 'viewer'
+        })
+        const body = res && res.data
+        if (body && body.code === 200) {
+          ElMessage.success(body.message || '增援申请已提交')
+          await this.refreshDecisionData()
+        } else {
+          ElMessage.error((body && body.message) || '提交增援申请失败')
+        }
+      } catch (err) {
+        ElMessage.error((err && err.message) || '提交增援申请失败，请确认后端服务已启动')
+      } finally {
+        this.applyingRegion = null
+      }
     },
     // 环比百分比展示：deltaPercent 为 null（上月无数据）时显示 —
     percentText(v) {
@@ -514,7 +580,13 @@ export default {
     if (r.status === 'fulfilled') this.realtime = r.value.data
     if (c.status === 'fulfilled') this.coverage = c.value.data
 
-    // 决策依据：网格员人力与增员需求 + 反馈覆盖度环比
+    // 决策依据：网格员人力与增员需求 + 反馈覆盖度环比（提交增援申请后需要重新拉取）
+    await this.refreshDecisionData()
+  },
+  // 决策依据取数（网格员人力 + 反馈覆盖度环比）。
+  // 说明：该函数位于组件 options 层，methods 内通过 $options 调用（见 methods.refreshDecisionData），
+  // 这样 created() 与“提交增援申请”后的刷新共用同一份逻辑，不复制代码。
+  async loadDecisionData() {
     // 后端业务错误是 HTTP 200 + body.code != 200，且后端未启动时可能直接抛错，
     // 因此统一用 allSettled 兜底，任何一侧失败都不影响整页渲染。
     const [w, f] = await Promise.allSettled([getWorkforce(), getFeedbackCoverage()])
@@ -534,7 +606,8 @@ export default {
         needMore: !!wf.needMore,
         needReasons: wf.needReasons || [],
         regions: wf.regions || [],
-        lackRegions: wf.lackRegions || []
+        lackRegions: wf.lackRegions || [],
+        needWorkerRegions: wf.needWorkerRegions || []
       }
     }
     if (f.status === 'fulfilled' && f.value.data && f.value.data.code === 200) {

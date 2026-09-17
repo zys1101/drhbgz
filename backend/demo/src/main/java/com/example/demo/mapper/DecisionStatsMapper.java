@@ -48,4 +48,22 @@ public interface DecisionStatsMapper {
     @Select("SELECT f.city_id AS cityId, COUNT(*) AS cnt FROM aqi_feedback f "
             + "WHERE f.state = 0 GROUP BY f.city_id")
     List<Map<String, Object>> selectPendingByCity();
+
+    /**
+     * “有任务却无人可派”的区域：存在待指派任务，但该区域没有任何在岗网格员。
+     * 决策者大屏据此提示可发起增援申请（不依赖是否已有增员请求）。
+     * 注意：本表无员工的区域（如苏州）也要能列出，因此省市名称从行政区划表取，
+     * 不能从 employee 表关联。
+     */
+    @Select("SELECT f.province_id AS provinceId, f.city_id AS cityId, "
+            + "p.province_name AS provinceName, c.city_name AS cityName, COUNT(*) AS pendingTasks "
+            + "FROM aqi_feedback f "
+            + "JOIN grid_province p ON f.province_id = p.province_id "
+            + "JOIN grid_city c ON f.city_id = c.city_id "
+            + "WHERE f.state = 0 AND NOT EXISTS ("
+            + "  SELECT 1 FROM employee e WHERE e.role = 'grid' AND e.working = 1 "
+            + "    AND e.province_id = f.province_id AND e.city_id = f.city_id) "
+            + "GROUP BY f.province_id, f.city_id, p.province_name, c.city_name "
+            + "ORDER BY COUNT(*) DESC")
+    List<Map<String, Object>> selectRegionsWithoutWorker();
 }

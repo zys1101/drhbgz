@@ -43,19 +43,44 @@ public class GridDemandController {
     private final GridCityMapper gridCityMapper;
 
     /**
-     * 发起增员请求（本地无可用网格员时）
+     * 发起增员请求（本地无可用网格员时）。
+     *
+     * 两种调用方式：
+     *  1. 管理员在“指派”弹窗里发起：传 afId（来源是具体反馈）
+     *  2. 决策者在大屏上发起：传 provinceId + cityId（大屏只有区域，看不到具体反馈），
+     *     此时自动关联该区域最早的一条待指派反馈以便追溯
+     * 可选 source=viewer 用于在说明中标注“决策者发起”。
      */
     @PostMapping("/apply")
     @Operation(summary = "发起增员请求")
     public ResultVO apply(@RequestBody Map<String, Object> body) {
         Integer afId = body.get("afId") == null ? null : Integer.parseInt(String.valueOf(body.get("afId")));
-        if (afId == null) {
-            throw new BusinessException("缺少反馈编号");
-        }
-        AqiFeedback fb = feedbackMapper.selectById(afId);
-        if (fb == null) {
+        Integer provinceId = body.get("provinceId") == null ? null
+                : Integer.parseInt(String.valueOf(body.get("provinceId")));
+        Integer cityId = body.get("cityId") == null ? null : Integer.parseInt(String.valueOf(body.get("cityId")));
+        boolean fromViewer = "viewer".equalsIgnoreCase(String.valueOf(body.getOrDefault("source", "")));
+
+        AqiFeedback fb = afId == null ? null : feedbackMapper.selectById(afId);
+        if (afId != null && fb == null) {
             throw new BusinessException("反馈数据不存在");
         }
+        if (fb == null) {
+            // 未给反馈编号：按区域发起（决策者大屏）
+            if (provinceId == null || cityId == null) {
+                throw new BusinessException("缺少反馈编号或区域（provinceId/cityId）");
+            }
+            // 关联该区域最早的一条待指派反馈，保证请求可追溯到具体任务
+            fb = feedbackMapper.selectOne(new LambdaQueryWrapper<AqiFeedback>()
+                    .eq(AqiFeedback::getState, AqiFeedback.STATE_UNASSIGNED)
+                    .eq(AqiFeedback::getProvinceId, provinceId)
+                    .eq(AqiFeedback::getCityId, cityId)
+                    .orderByAsc(AqiFeedback::getAfId)
+                    .last("LIMIT 1"));
+            if (fb == null) {
+                throw new BusinessException("该网格区域当前没有待指派任务，无需增援");
+            }
+        }
+
         // 若该区域已有可工作的本地网格员，应直接本地指派，不需要增员
         if (hasLocalWorker(fb.getProvinceId(), fb.getCityId())) {
             throw new BusinessException("该网格区域已有可工作的网格员，请直接本地指派");
@@ -75,17 +100,19 @@ public class GridDemandController {
         GridDemand d = new GridDemand();
         d.setProvinceId(fb.getProvinceId());
         d.setCityId(fb.getCityId());
-        d.setAfId(afId);
+        d.setAfId(fb.getAfId());
         d.setReason(body.get("reason") == null
-                ? "网格区域【" + cityName + "】无可工作的本地网格员，反馈任务无法指派，申请增加网格员"
+                ? (fromViewer
+                        ? "决策者在大屏发起增援申请：网格区域【" + cityName + "】无可工作的本地网格员，待指派任务无法派单"
+                        : "网格区域【" + cityName + "】无可工作的本地网格员，反馈任务无法指派，申请增加网格员")
                 : String.valueOf(body.get("reason")));
         d.setState(GridDemand.STATE_PENDING);
         d.setApplyDate(now.format(DATE_FMT));
         d.setApplyTime(now.format(TIME_FMT));
         demandMapper.insert(d);
-        log.info("反馈{}所在区域（{}-{}）无可工作网格员，已生成增员请求{}",
-                afId, fb.getProvinceId(), fb.getCityId(), d.getDemandId());
-        return new ResultVO(200, "已提交增员请求，等待决策者/管理员处理", d);
+        log.info("{}发起增援申请：区域（{}-{}）无可工作网格员，关联反馈{}，请求{}",
+                fromViewer ? "决策者" : "管理员", fb.getProvinceId(), fb.getCityId(), fb.getAfId(), d.getDemandId());
+        return new ResultVO(200, fromViewer ? "已提交增援申请，等待管理员处理" : "已提交增员请求，等待决策者/管理员处理", d);
     }
 
     /** 增员请求列表（管理员跟进 / 决策者查看） */

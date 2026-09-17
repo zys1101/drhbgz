@@ -291,10 +291,31 @@ def has_local_working_worker(conn, province_id, city_id):
 
 
 def api_grid_demand_apply(conn, body):
+    """发起增员/增援申请。
+    两种调用方式（与 SpringBoot 端一致）：
+      1. 管理员在“指派”弹窗发起：传 afId
+      2. 决策者在大屏发起：传 provinceId + cityId（大屏看不到具体反馈），
+         自动关联该区域最早的一条待指派反馈；可选 source=viewer 用于标注发起方
+    """
     af_id = int(body.get('afId') or 0)
-    fb = conn.execute('SELECT * FROM aqi_feedback WHERE af_id=?', (af_id,)).fetchone()
-    if fb is None:
-        raise BizError(400, '反馈数据不存在')
+    from_viewer = str(body.get('source') or '').lower() == 'viewer'
+    fb = None
+    if af_id:
+        fb = conn.execute('SELECT * FROM aqi_feedback WHERE af_id=?', (af_id,)).fetchone()
+        if fb is None:
+            raise BizError(400, '反馈数据不存在')
+    else:
+        # 未给反馈编号：按区域发起（决策者大屏）
+        province_id = body.get('provinceId')
+        city_id = body.get('cityId')
+        if province_id is None or city_id is None:
+            raise BizError(400, '缺少反馈编号或区域（provinceId/cityId）')
+        fb = conn.execute(
+            'SELECT * FROM aqi_feedback WHERE state=0 AND province_id=? AND city_id=? '
+            'ORDER BY af_id LIMIT 1', (int(province_id), int(city_id))).fetchone()
+        if fb is None:
+            raise BizError(400, '该网格区域当前没有待指派任务，无需增援')
+
     if has_local_working_worker(conn, fb['province_id'], fb['city_id']):
         raise BizError(400, '该网格区域已有可工作的网格员，请直接本地指派')
     exist = conn.execute(
@@ -306,15 +327,21 @@ def api_grid_demand_apply(conn, body):
     city = conn.execute('SELECT city_name FROM grid_city WHERE city_id=?',
                         (fb['city_id'],)).fetchone()
     city_name = city['city_name'] if city else str(fb['city_id'])
-    reason = body.get('reason') or (
-        '网格区域【%s】无可工作的本地网格员，反馈任务无法指派，申请增加网格员' % city_name)
+    if body.get('reason'):
+        reason = body['reason']
+    elif from_viewer:
+        reason = ('决策者在大屏发起增援申请：网格区域【%s】无可工作的本地网格员，待指派任务无法派单'
+                  % city_name)
+    else:
+        reason = ('网格区域【%s】无可工作的本地网格员，反馈任务无法指派，申请增加网格员' % city_name)
     d, t = now_strs()
     cur = conn.execute(
         'INSERT INTO grid_demand (province_id, city_id, af_id, reason, state, apply_date, apply_time)'
-        ' VALUES (?,?,?,?,0,?,?)', (fb['province_id'], fb['city_id'], af_id, reason, d, t))
+        ' VALUES (?,?,?,?,0,?,?)', (fb['province_id'], fb['city_id'], fb['af_id'], reason, d, t))
     conn.commit()
     row = conn.execute('SELECT * FROM grid_demand WHERE demand_id=?', (cur.lastrowid,)).fetchone()
-    return row_to_camel(row), '已提交增员请求，等待决策者/管理员处理'
+    return row_to_camel(row), ('已提交增援申请，等待管理员处理' if from_viewer
+                               else '已提交增员请求，等待决策者/管理员处理')
 
 
 GRID_DEMAND_SELECT = '''
@@ -918,13 +945,38 @@ def api_stats_workforce(conn):
             '待指派任务 %d 条，超出 %d 名空闲网格员按人均 %d 条的承载能力，建议增员 %d 人'
             % (pending_tasks, idle, capacity, backlog_need))
 
+    # 可发起增援申请的区域：有任务却一个在岗网格员都没有（决策者大屏据此给出提交入口）
+    demand_by_region = {(d['province_id'], d['city_id']): d for d in demands}
+    need_worker_regions = []
+    for r in conn.execute(
+            "SELECT f.province_id AS province_id, f.city_id AS city_id, "
+            "       p.province_name AS province_name, c.city_name AS city_name, "
+            "       COUNT(*) AS pending_tasks "
+            "FROM aqi_feedback f "
+            "JOIN grid_province p ON f.province_id = p.province_id "
+            "JOIN grid_city c ON f.city_id = c.city_id "
+            "WHERE f.state = 0 AND NOT EXISTS ("
+            "  SELECT 1 FROM employee e WHERE e.role='grid' AND e.working=1 "
+            "    AND e.province_id = f.province_id AND e.city_id = f.city_id) "
+            "GROUP BY f.province_id, f.city_id, p.province_name, c.city_name "
+            "ORDER BY COUNT(*) DESC").fetchall():
+        exist = demand_by_region.get((r['province_id'], r['city_id']))
+        need_worker_regions.append({
+            'provinceId': r['province_id'], 'cityId': r['city_id'],
+            'provinceName': r['province_name'], 'cityName': r['city_name'],
+            'pendingTasks': r['pending_tasks'],
+            'hasDemand': exist is not None,
+            'demandId': exist['demand_id'] if exist is not None else None
+        })
+
     return {
         'total': total, 'working': working_count, 'onLeave': on_leave,
         'busy': busy, 'idle': idle, 'capacity': capacity,
         'pendingTasks': pending_tasks, 'pendingDemands': demand_need,
         'suggestAdd': suggest_add, 'needMore': suggest_add > 0,
         'needReasons': need_reasons, 'regions': list(regions.values()),
-        'lackRegions': lack_regions}, '查询成功'
+        'lackRegions': lack_regions,
+        'needWorkerRegions': need_worker_regions}, '查询成功'
 
 
 def java_round(x):

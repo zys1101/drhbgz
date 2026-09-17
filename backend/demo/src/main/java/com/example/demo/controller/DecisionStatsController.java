@@ -138,6 +138,28 @@ public class DecisionStatsController {
                     pendingTasks, idle, capacity, backlogNeed));
         }
 
+        // 可发起增援申请的区域：有任务却一个在岗网格员都没有。
+        // 决策者大屏据此给出“提交增援申请”入口，并标记该区域是否已提交过（避免重复提交）。
+        Map<String, GridDemand> demandByRegion = new HashMap<>();
+        for (GridDemand d : pendingDemands) {
+            demandByRegion.put(d.getProvinceId() + "-" + d.getCityId(), d);
+        }
+        List<Map<String, Object>> needWorkerRegions = new ArrayList<>();
+        for (Map<String, Object> r : decisionStatsMapper.selectRegionsWithoutWorker()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            Integer pid = asInt(r.get("provinceId"));
+            Integer cid = asInt(r.get("cityId"));
+            m.put("provinceId", pid);
+            m.put("cityId", cid);
+            m.put("provinceName", r.get("provinceName"));
+            m.put("cityName", r.get("cityName"));
+            m.put("pendingTasks", asLong(r.get("pendingTasks")));
+            GridDemand exist = demandByRegion.get(pid + "-" + cid);
+            m.put("hasDemand", exist != null);
+            m.put("demandId", exist == null ? null : exist.getDemandId());
+            needWorkerRegions.add(m);
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", total);
         result.put("working", workingCount);
@@ -152,6 +174,7 @@ public class DecisionStatsController {
         result.put("needReasons", needReasons);
         result.put("regions", new ArrayList<>(regionMap.values()));
         result.put("lackRegions", lackRegions);
+        result.put("needWorkerRegions", needWorkerRegions);
         return new ResultVO(200, "查询成功", result);
     }
 
