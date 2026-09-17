@@ -1,86 +1,107 @@
 <template>
-  <div class="page">
-    <transition name="toast">
-      <div v-if="toast.show" class="toast" :class="toast.type">
-        <span class="toast-msg">{{ toast.message }}</span>
-      </div>
-    </transition>
+  <div class="app-page">
+    <button class="app-back" @click="$router.push('/gw/tasks')">
+      <i class="fa-solid fa-arrow-left"></i>返回任务列表
+    </button>
 
-    <div class="card">
-      <div class="card-header">
-        <button class="back-btn" @click="$router.push('/gw/tasks')">
-          <span>&larr;</span> 返回任务列表
-        </button>
-        <h2 class="card-title">实测 AQI 数据录入</h2>
-      </div>
-
-      <div v-if="!task" class="empty-wrap">
-        <span class="empty-icon">⚠️</span>
-        <span>未找到任务数据，请从任务列表进入</span>
-      </div>
-
-      <template v-else>
-        <div class="task-brief">
-          <div class="brief-row"><span class="brief-label">任务编号</span><span>{{ task.taskId }}</span></div>
-          <div class="brief-row"><span class="brief-label">网格区域</span><span>{{ task.provinceName }} · {{ task.cityName }}</span></div>
-          <div class="brief-row"><span class="brief-label">具体地址</span><span>{{ task.address }}</span></div>
-          <div class="brief-row"><span class="brief-label">预估等级</span><span>{{ gradeText(task.estimatedGrade) }}</span></div>
-          <div class="brief-row"><span class="brief-label">反馈描述</span><span>{{ task.information }}</span></div>
+    <div v-if="task" class="app-card">
+      <div class="app-card-head">
+        <div>
+          <h2 class="app-card-title">
+            <span class="app-ico"><i class="fa-solid fa-vials"></i></span>
+            录入实测 AQI 数据
+          </h2>
+          <p class="app-card-sub">任务编号 {{ task.taskId || task.afId }} · 到达网格区域实地检测后如实录入</p>
         </div>
+      </div>
 
-        <form class="measure-form" @submit.prevent="handleSubmit">
-          <div class="section-title">三项污染物实测浓度等级</div>
+      <!-- 任务信息卡 -->
+      <div class="task-brief">
+        <div class="brief-region">
+          <i class="fa-solid fa-location-dot"></i>
+          <b>{{ task.provinceName }} · {{ task.cityName }}</b>
+        </div>
+        <span class="brief-addr">{{ task.address }}</span>
+        <div class="brief-meta">
+          <span>预估等级</span>
+          <GradeTag :grade="task.estimatedGrade" />
+          <span class="brief-dot">·</span>
+          <span>反馈时间 {{ task.afDate }} {{ task.afTime }}</span>
+        </div>
+        <p class="brief-info">“{{ task.information }}”</p>
+      </div>
 
-          <div class="measure-grid">
-            <div class="measure-item" v-for="item in pollutants" :key="item.key">
-              <label class="form-label">{{ item.label }} <span class="required">*</span></label>
-              <div class="grade-btns">
-                <button
-                  v-for="g in gradeOptions"
-                  :key="g.value"
-                  type="button"
-                  class="grade-btn"
-                  :class="{ active: measure[item.key] === g.value, ['g' + g.value]: true }"
-                  @click="measure[item.key] = g.value"
-                >{{ g.value }}级</button>
-              </div>
-            </div>
+      <!-- 检测流程 -->
+      <el-steps :active="completedCount" align-center class="steps" finish-status="success">
+        <el-step v-for="p in pollutants" :key="p.key" :title="p.short" description="浓度等级" />
+      </el-steps>
+
+      <div class="measure-grid">
+        <div v-for="p in pollutants" :key="p.key" class="measure-item" :class="{ done: measure[p.key] > 0 }">
+          <div class="measure-label">
+            <i class="fa-solid fa-industry"></i>{{ p.label }}
           </div>
+          <el-select v-model="measure[p.key]" placeholder="选择等级" size="large" style="width: 100%">
+            <el-option v-for="g in gradeOptions" :key="g.value" :value="g.value" :label="g.label" />
+          </el-select>
+        </div>
+      </div>
 
-          <div class="aqi-result" :class="'g' + aqiGrade">
-            <div class="aqi-label">
-              系统按 <b>AQI = MAX（SO₂, CO, PM2.5）</b> 自动计算：
-            </div>
-            <div class="aqi-value">
-              当前网格区域 AQI 等级：<b>{{ aqiGrade > 0 ? gradeText(aqiGrade) : '待完整录入' }}</b>
-            </div>
+      <!-- AQI 结果 -->
+      <transition name="pop">
+        <div v-if="aqiGrade > 0" class="aqi-result" :style="resultStyle">
+          <div class="aqi-result-label">系统按 AQI = MAX（SO2AQI，COAQI，PM2.5AQI）自动计算</div>
+          <div class="aqi-result-value">
+            当前网格区域 AQI 等级：<b>{{ gradeText(aqiGrade) }}</b>
           </div>
+        </div>
+      </transition>
 
-          <div class="form-actions">
-            <button type="button" class="btn btn-default" @click="resetMeasure">重新录入</button>
-            <button type="submit" class="btn btn-primary" :disabled="submitting || aqiGrade === 0">
-              {{ submitting ? '提交中...' : '确认提交' }}
-            </button>
-          </div>
-        </form>
-      </template>
+      <div class="form-actions">
+        <el-button size="large" @click="resetMeasure">
+          <i class="fa-solid fa-rotate-left" style="margin-right:6px"></i>重新录入
+        </el-button>
+        <el-button type="primary" size="large" class="app-btn-primary" :loading="submitting" @click="handleSubmit">
+          <i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>提交实测数据
+        </el-button>
+      </div>
+    </div>
+
+    <div v-else class="app-card">
+      <div class="app-empty">
+        <span class="app-empty-icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
+        <p>未找到任务数据，请从任务列表进入</p>
+        <button class="app-btn-primary app-btn-sm" @click="$router.push('/gw/tasks')">返回任务列表</button>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
+import { ElMessage } from 'element-plus'
+import GradeTag from '../../components/GradeTag.vue'
 import { submitMeasure } from '../../api/task'
 import { AQI_GRADES, gradeText, calcAqiGrade } from '../../constants/aqi'
 
+const RESULT_COLORS = {
+  1: { bg: '#f0fdf4', border: '#bbf7d0', color: '#16a34a' },
+  2: { bg: '#f7fee7', border: '#d9f99d', color: '#65a30d' },
+  3: { bg: '#fffbeb', border: '#fde68a', color: '#d97706' },
+  4: { bg: '#fef2f2', border: '#fecaca', color: '#dc2626' },
+  5: { bg: '#fff1f2', border: '#fda4af', color: '#be123c' },
+  6: { bg: '#fde8e8', border: '#fca5a5', color: '#7f1d1d' }
+}
+
 export default {
   name: 'TaskMeasureView',
+  components: { GradeTag },
   data() {
     return {
       task: null,
       pollutants: [
-        { key: 'so2Grade', label: 'SO₂ 二氧化硫浓度等级' },
-        { key: 'coGrade', label: 'CO 一氧化碳浓度等级' },
-        { key: 'pm25Grade', label: 'PM2.5 悬浮颗粒物浓度等级' }
+        { key: 'so2Grade', label: 'SO₂ 二氧化硫 AQI 浓度等级', short: 'SO₂' },
+        { key: 'coGrade', label: 'CO 一氧化碳 AQI 浓度等级', short: 'CO' },
+        { key: 'pm25Grade', label: 'PM2.5 悬浮颗粒物 AQI 浓度等级', short: 'PM2.5' }
       ],
       measure: {
         so2Grade: 0,
@@ -88,14 +109,19 @@ export default {
         pm25Grade: 0
       },
       gradeOptions: AQI_GRADES,
-      submitting: false,
-      toast: { show: false, type: 'success', message: '' },
-      toastTimer: null
+      submitting: false
     }
   },
   computed: {
     aqiGrade() {
       return calcAqiGrade(this.measure.so2Grade, this.measure.coGrade, this.measure.pm25Grade)
+    },
+    completedCount() {
+      return ['so2Grade', 'coGrade', 'pm25Grade'].filter(k => this.measure[k] > 0).length
+    },
+    resultStyle() {
+      const c = RESULT_COLORS[this.aqiGrade] || RESULT_COLORS[1]
+      return { background: c.bg, borderColor: c.border, color: c.color }
     }
   },
   created() {
@@ -110,27 +136,22 @@ export default {
   },
   methods: {
     gradeText,
-    showToast(type, message) {
-      this.toast = { show: true, type, message }
-      if (this.toastTimer) clearTimeout(this.toastTimer)
-      this.toastTimer = setTimeout(() => { this.toast.show = false }, 2500)
-    },
     resetMeasure() {
       this.measure = { so2Grade: 0, coGrade: 0, pm25Grade: 0 }
     },
     async handleSubmit() {
       if (this.aqiGrade === 0) {
-        this.showToast('warning', '请完整录入三项检测数据')
+        ElMessage.warning('请完整录入三项检测数据')
         return
       }
       this.submitting = true
       try {
         await submitMeasure(this.task, { ...this.measure, aqiGrade: this.aqiGrade })
-        this.showToast('success', '提交成功，任务已完成，数据已进入确认AQI数据列表')
-        setTimeout(() => this.$router.push('/gw/tasks'), 1200)
+        ElMessage.success('提交成功，任务已完成，数据已进入确认AQI数据列表')
+        setTimeout(() => this.$router.push('/gw/tasks'), 1000)
       } catch (err) {
         console.error(err)
-        this.showToast('error', '提交失败，请重试')
+        ElMessage.error((err && err.message) || '提交失败，请重试')
         this.submitting = false
       }
     }
@@ -139,235 +160,159 @@ export default {
 </script>
 
 <style scoped>
-.page {
-  padding: 28px 32px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  text-align: left;
+/* 桌面端：录入卡片居中限宽 */
+.app-card {
+  max-width: 1000px;
+  margin: 0 auto;
 }
 
-.card {
-  width: 860px;
-  max-width: 100%;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  overflow: hidden;
-}
-
-.card-header {
-  padding: 20px 28px;
-  border-bottom: 1px solid #ebeef5;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.back-btn {
+.app-back {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  border: none;
   background: transparent;
-  border: 1px solid #dcdfe6;
-  color: #606266;
-  padding: 7px 14px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s;
-}
-
-.back-btn:hover {
-  color: #42b983;
-  border-color: #42b983;
-  background: #e8f7f0;
-}
-
-.card-title {
-  margin: 0;
-  font-size: 19px;
-  color: #2c3e50;
-}
-
-.task-brief {
-  margin: 20px 28px 0;
-  padding: 14px 18px;
-  background: #f8fafb;
-  border-radius: 10px;
-}
-
-.brief-row {
-  display: flex;
-  font-size: 13px;
-  line-height: 1.9;
-}
-
-.brief-label {
-  width: 76px;
-  flex-shrink: 0;
-  color: #909399;
-}
-
-.measure-form {
-  padding: 20px 28px 28px;
-}
-
-.section-title {
-  font-size: 15px;
+  color: var(--app-strong);
+  font-size: 13.5px;
   font-weight: 600;
-  color: #2e8565;
-  margin: 4px 0 18px;
-  padding-left: 12px;
-  border-left: 4px solid #42b983;
-  line-height: 1;
+  cursor: pointer;
+  padding: 8px 12px;
+  margin: -4px 0 12px -12px;
+  border-radius: 12px;
+  transition: background 0.18s;
 }
 
-.measure-grid {
+.app-back:hover {
+  background: var(--app-soft);
+}
+
+/* 任务信息卡 */
+.task-brief {
+  background: var(--app-soft);
+  border: 1px dashed var(--app-ring);
+  border-radius: 18px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+
+.brief-region {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-bottom: 22px;
-}
-
-.form-label {
-  display: block;
-  font-size: 14px;
-  color: #303133;
-  margin-bottom: 8px;
-  font-weight: 500;
-}
-
-.required {
-  color: #f56c6c;
-}
-
-.grade-btns {
-  display: flex;
+  align-items: center;
   gap: 8px;
+  color: var(--app-strong);
+  font-size: 15px;
+}
+
+.brief-region i {
+  font-size: 13px;
+}
+
+.brief-addr {
+  display: block;
+  margin: 5px 0 8px 21px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.brief-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 21px;
+  font-size: 12.5px;
+  color: #94a3b8;
   flex-wrap: wrap;
 }
 
-.grade-btn {
-  min-width: 74px;
-  padding: 9px 0;
-  border: 1px solid #dcdfe6;
-  background: #fff;
-  border-radius: 8px;
+.brief-info {
+  margin: 8px 0 0 21px;
+  color: #64748b;
   font-size: 13px;
-  color: #606266;
-  cursor: pointer;
-  transition: all 0.15s;
+  font-style: italic;
+  word-break: break-all;
 }
 
-.grade-btn:hover {
-  border-color: #42b983;
-  color: #2e8565;
+/* 步骤条 */
+.steps {
+  margin: 6px 0 22px;
 }
 
-.grade-btn.active.g1 { background: #95e8a7; border-color: #95e8a7; color: #1a6b32; font-weight: 700; }
-.grade-btn.active.g2 { background: #e1f3d8; border-color: #b3e19d; color: #529b2e; font-weight: 700; }
-.grade-btn.active.g3 { background: #faecd8; border-color: #f3d19e; color: #b88230; font-weight: 700; }
-.grade-btn.active.g4 { background: #fde2e2; border-color: #fab6b6; color: #c45656; font-weight: 700; }
-.grade-btn.active.g5 { background: #f89898; border-color: #f89898; color: #fff; font-weight: 700; }
-.grade-btn.active.g6 { background: #7b4a12; border-color: #7b4a12; color: #fff; font-weight: 700; }
+/* 三项检测 */
+.measure-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
 
+.measure-item {
+  border: 1.5px solid var(--app-ring);
+  border-radius: 16px;
+  padding: 14px;
+  transition: all 0.2s;
+}
+
+.measure-item.done {
+  border-color: #6ee7b7;
+  background: #f7fdfa;
+}
+
+.measure-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 10px;
+}
+
+.measure-label i {
+  color: var(--app-strong);
+}
+
+/* AQI 结果横幅 */
 .aqi-result {
-  padding: 16px 20px;
-  border-radius: 10px;
-  margin-bottom: 8px;
-  background: #f4f4f5;
-  border: 1px solid #e4e7ed;
+  margin-top: 18px;
+  border: 1px solid;
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.aqi-label {
+.aqi-result-label {
   font-size: 12px;
-  color: #909399;
-  margin-bottom: 6px;
+  opacity: 0.75;
 }
 
-.aqi-value {
-  font-size: 15px;
-  color: #303133;
+.aqi-result-value {
+  font-size: 14px;
+}
+
+.aqi-result-value b {
+  font-size: 16px;
+}
+
+.pop-enter-active {
+  transition: all 0.25s ease;
+}
+
+.pop-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 .form-actions {
   display: flex;
   justify-content: center;
-  gap: 14px;
-  margin-top: 22px;
-  padding-top: 22px;
-  border-top: 1px solid #ebeef5;
+  gap: 12px;
+  margin-top: 20px;
 }
 
-.btn {
-  padding: 10px 30px;
-  font-size: 15px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 500;
+@media (max-width: 560px) {
+  .measure-grid {
+    grid-template-columns: 1fr;
+  }
 }
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #42b983, #2e8565);
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(66, 185, 131, 0.3);
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(66, 185, 131, 0.4);
-}
-
-.btn-default {
-  background: #fff;
-  color: #606266;
-  border: 1px solid #dcdfe6;
-}
-
-.btn-default:hover {
-  color: #42b983;
-  border-color: #42b983;
-}
-
-.empty-wrap {
-  padding: 80px 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  color: #c0c4cc;
-  font-size: 14px;
-}
-
-.empty-icon {
-  font-size: 40px;
-}
-
-/* Toast */
-.toast {
-  position: fixed;
-  top: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 22px;
-  border-radius: 8px;
-  font-size: 14px;
-  z-index: 9999;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-}
-
-.toast.success { background: #f0f9eb; color: #67c23a; border: 1px solid #e1f3d8; }
-.toast.error   { background: #fef0f0; color: #f56c6c; border: 1px solid #fde2e2; }
-.toast.warning { background: #fdf6ec; color: #e6a23c; border: 1px solid #faecd8; }
-
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, -20px); }
 </style>

@@ -24,7 +24,9 @@ function loadProfile() {
 
 export default createStore({
   state: {
-    user: savedUser ? JSON.parse(savedUser) : null,
+    // savedUser 在上方已解析为对象，不能再二次 JSON.parse（否则启动即抛
+    // "[object Object]" is not valid JSON，导致整站白屏）
+    user: savedUser,
     profile: loadProfile()
   },
   getters: {

@@ -1,3 +1,26 @@
 backend/.idea
 
 .vscode
+# 预览服务运行时数据库
+preview/nep_preview.db
+
+# 前端构建产物与依赖
+front/dist/
+front/node_modules/
+
+# 自动化测试工程构建产物与运行截图
+auto_test/target/
+auto_test/screenshots/
+# 每次运行都会重新生成的结果文件（UTF-8 明细，仅作本地留档）
+auto_test/test-results.tsv
+
+# IDE / 日志
+*.iml
+.idea/
+*.log
+# Office 打开文档时产生的临时锁文件
+~$*
+
+# Python 缓存 / 会话目录
+__pycache__/
+.zcode/

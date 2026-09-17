@@ -1,16 +1,61 @@
 server:
-  port: 9000
+  port: 9000                 # 后端服务端口
+  servlet:
+    context-path: /api       # 统一API前缀，前端通过 vue devServer 代理 /api 访问
 
 springdoc:
   api-docs:
-    path: /api-docs
+    path: /api-docs          # Swagger文档：http://localhost:9000/api/swagger-ui.html
   swagger-ui:
     path: /swagger-ui.html
 
-#数据库的链接配置
+# 数据库的链接配置（先执行 sql/nep_system.sql 建库）
 spring:
+  ai:
+    openai:
+        base-url: https://api.siliconflow.cn
+        api-key: "sk-hnxyshrwjnyvpplvkqrlnknmoxmbifwlrakjzmsumasjaigk"
+        chat:
+          options:
+            model: "deepseek-ai/DeepSeek-V4-Flash"
+            temperature: 0.1
+#      base-url: http://127.0.0.1:11434/
+#      api-key: "ollama"
+#      chat:
+#        options:
+#          model: "qwen3:latest"
+#          temperature: 0.1
   datasource:
     driver-class-name:  com.mysql.cj.jdbc.Driver #数据库驱动
-    url: jdbc:mysql://localhost:3306/test?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&allowMultiQueries=true&useSSL=false&allowPublicKeyRetrieval=true&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&tinyInt1isBit=false&allowPublicKeyRetrieval=true&useInformationSchema=true&allowMultiQueries=true&useUnicode=true&characterEncoding=utf-8&allowMultiQueries=true&useSSL=false&allowPublicKeyRet
+    url: jdbc:mysql://localhost:3306/nep_system?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true
     username: root
-    password: As.123456  #这个你们一定要改成自己的
+    password: As.123456      # 请改成自己的MySQL密码
+
+# AI 助手（大模型，可切换，遵循老师 README 约定：切换远程/本地模型只改这里）
+# 未配置 api-key 时本块不生效，AI 助手自动使用规则意图引擎（与预览服务契约一致）
+# spring:
+#   ai:
+#     openai:
+#       base-url: http://127.0.0.1:11434/v1   # Ollama 本地；换成在线大模型地址即可
+#       api-key: ollama                        # Ollama 任意值；在线模型填真实 key
+#       chat:
+#         options:
+#           model: qwen3:latest
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    # 开发阶段可打开SQL日志
+    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    banner: false
+
+# 业务规则配置
+nep:
+  task:
+    # 已指派任务在该小时数内未提交实测数据，则自动回收重新进入“待指派”池
+    repool-hours: 24
+    # 扫描间隔（毫秒），默认 5 分钟
+    repool-scan-interval: 300000
+    # 单个网格员可同时承担的在办任务数上限（决策看板据此推算“是否需要增员”）
+    worker-capacity: 3

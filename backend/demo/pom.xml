@@ -27,7 +27,22 @@
     </scm>
     <properties>
         <java.version>17</java.version>
+        <!-- 大模型（spring-ai）：切换远程/本地模型只改 application.yml 的 spring.ai.openai 配置 -->
+        <spring-ai.version>1.0.0</spring-ai.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -56,6 +71,17 @@
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
             <version>3.5.12</version>
+        </dependency>
+        <!--AI 助手：spring-ai（OpenAI 协议，可接 Ollama 本地模型或在线大模型；未配置 api-key 时自动退化为规则引擎）-->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+        <!-- 如果你的 MyBatis-Plus 版本是 3.5.9，则添加以下内容 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <version>3.5.12</version> <!-- 请替换为你实际使用的 mybatis-plus 版本号 -->
         </dependency>
         <!--Mybatis的自动生成类的依赖-->
         <dependency>

@@ -1,167 +1,190 @@
 <template>
-  <div class="page">
-    <transition name="toast">
-      <div v-if="toast.show" class="toast" :class="toast.type">
-        <span class="toast-msg">{{ toast.message }}</span>
-      </div>
-    </transition>
-
-    <div class="card">
-      <div class="card-header">
+  <div class="nep-page">
+    <div class="nep-card">
+      <div class="nep-card-header">
         <div>
-          <h2 class="card-title">公众监督数据管理</h2>
-          <p class="card-sub">浏览、查询公众监督员反馈数据，并为待指派数据指派网格员</p>
+          <h2 class="nep-card-title">
+            <span class="nep-title-icon"><i class="fa-solid fa-inbox"></i></span>
+            公众监督数据列表
+          </h2>
+          <p class="nep-card-sub">浏览公众监督员反馈的数据，按条件查询并指派网格员实地检测</p>
         </div>
+        <el-button :icon="Refresh" circle @click="fetchList" />
       </div>
 
       <!-- 查询条件 -->
       <div class="filter-bar">
-        <input v-model.trim="filters.keyword" class="filter-input" placeholder="地区 / 地址 / 手机号">
-        <select v-model="filters.grade" class="filter-input">
-          <option value="">全部等级</option>
-          <option v-for="g in gradeOptions" :key="g.value" :value="g.value">{{ g.label }}</option>
-        </select>
-        <select v-model="filters.state" class="filter-input">
-          <option value="">全部状态</option>
-          <option v-for="s in stateOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
-        </select>
-        <input v-model="filters.dateFrom" type="date" class="filter-input" title="起始日期">
-        <input v-model="filters.dateTo" type="date" class="filter-input" title="截止日期">
-        <button class="btn-filter" @click="applyFilter">查询</button>
-        <button class="btn-filter reset" @click="resetFilter">重置</button>
+        <el-input v-model="filters.keyword" placeholder="地区 / 地址 / 手机号 / 描述关键字" clearable class="f-kw"
+          @keyup.enter="applyFilter">
+          <template #prefix><i class="fa-solid fa-magnifying-glass"></i></template>
+        </el-input>
+        <el-select v-model="filters.grade" placeholder="预估等级" clearable class="f-sm">
+          <el-option v-for="g in gradeOptions" :key="g.value" :value="g.value" :label="g.label" />
+        </el-select>
+        <el-select v-model="filters.state" placeholder="状态" clearable class="f-sm">
+          <el-option v-for="s in stateOptions" :key="s.value" :value="s.value" :label="s.label" />
+        </el-select>
+        <el-date-picker v-model="dateRange" type="daterange" range-separator="至" start-placeholder="反馈开始"
+          end-placeholder="反馈结束" value-format="YYYY-MM-DD" class="f-date" />
+        <el-button type="primary" class="nep-btn-gradient" @click="applyFilter">
+          <i class="fa-solid fa-magnifying-glass" style="margin-right:4px"></i>查询
+        </el-button>
+        <el-button @click="resetFilter">
+          <i class="fa-solid fa-rotate-left" style="margin-right:4px"></i>重置
+        </el-button>
       </div>
 
-      <div v-if="loading" class="loading-wrap">
-        <div class="spinner"></div>
-        <span class="loading-text">数据加载中...</span>
-      </div>
+      <div class="nep-table-wrap">
+        <el-table v-loading="loading" :data="pagedList" style="width: 100%"
+          :header-cell-style="{ background: '#f8faf9' }">
+          <el-table-column prop="afId" label="编号" width="70" />
+          <el-table-column label="网格区域" min-width="150">
+            <template #default="{ row }">
+              <span class="region"><i class="fa-solid fa-location-dot region-icon"></i>
+                {{ row.provinceName }} · {{ row.cityName }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="address" label="具体地址" min-width="150" show-overflow-tooltip />
+          <el-table-column label="反馈人" width="120">
+            <template #default="{ row }">
+              <span class="muted">{{ maskTel(row.telId) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="预估AQI等级" width="125" align="center">
+            <template #default="{ row }">
+              <GradeTag :grade="row.estimatedGrade" />
+            </template>
+          </el-table-column>
+          <el-table-column label="反馈时间" width="165">
+            <template #default="{ row }">
+              <span class="muted">{{ row.afDate }} {{ row.afTime }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="95" align="center">
+            <template #default="{ row }">
+              <StateTag :state="row.state" />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="180" align="center" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="showDetail(row)">详情</el-button>
+              <el-button v-if="row.state === 0 || row.state === 2" link type="warning" size="small"
+                @click="openAssign(row)">指派</el-button>
+              <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+            </template>
+          </el-table-column>
+          <template #empty>
+            <div class="nep-empty" style="padding:40px">
+              <span class="nep-empty-icon"><i class="fa-regular fa-folder-open"></i></span>
+              <span>暂无数据</span>
+            </div>
+          </template>
+        </el-table>
 
-      <div v-else class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th width="70">ID</th>
-              <th>省份</th>
-              <th>城市</th>
-              <th>地址</th>
-              <th>提交时间</th>
-              <th>预估等级</th>
-              <th>状态</th>
-              <th>手机号</th>
-              <th width="220">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in filteredList" :key="item.afId">
-              <td class="cell-id">{{ item.afId }}</td>
-              <td>{{ item.provinceName }}</td>
-              <td>{{ item.cityName }}</td>
-              <td class="cell-ellipsis" :title="item.address">{{ item.address }}</td>
-              <td class="cell-nowrap">{{ item.afDate }} {{ item.afTime }}</td>
-              <td>
-                <span class="grade-tag" :class="'grade-' + item.estimatedGrade">{{ gradeText(item.estimatedGrade) }}</span>
-              </td>
-              <td>
-                <span class="state-tag" :class="'state-' + item.state">{{ stateText(item.state) }}</span>
-              </td>
-              <td>{{ item.telId }}</td>
-              <td>
-                <div class="action-buttons">
-                  <button class="btn-text btn-detail" @click="showDetail(item)">详情</button>
-                  <button
-                    v-if="item.state === 0"
-                    class="btn-text btn-assign"
-                    @click="openAssign(item)"
-                  >指派网格员</button>
-                  <button class="btn-text btn-danger" @click="handleDelete(item)">删除</button>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="filteredList.length === 0">
-              <td colspan="9" class="empty-cell">
-                <span class="empty-icon">📭</span>
-                <span>暂无符合条件的数据</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="pager">
+          <el-pagination v-model:current-page="page.current" v-model:page-size="page.size"
+            :total="filteredList.length" :page-sizes="[10, 20, 50]" background
+            layout="total, sizes, prev, pager, next" />
+        </div>
       </div>
     </div>
 
     <!-- 详情弹窗 -->
-    <div v-if="detail" class="dialog-mask" @click.self="detail = null">
-      <div class="dialog">
-        <div class="dialog-header">
-          <h3>反馈数据详情</h3>
-          <button class="dialog-close" @click="detail = null">✕</button>
-        </div>
-        <div class="dialog-body">
-          <div class="detail-row"><span class="detail-label">反馈编号</span><span>{{ detail.afId }}</span></div>
-          <div class="detail-row"><span class="detail-label">网格区域</span><span>{{ detail.provinceName }} · {{ detail.cityName }}</span></div>
-          <div class="detail-row"><span class="detail-label">具体地址</span><span>{{ detail.address }}</span></div>
-          <div class="detail-row"><span class="detail-label">提交时间</span><span>{{ detail.afDate }} {{ detail.afTime }}</span></div>
-          <div class="detail-row"><span class="detail-label">预估等级</span><span>{{ gradeText(detail.estimatedGrade) }}</span></div>
-          <div class="detail-row"><span class="detail-label">当前状态</span><span>{{ stateText(detail.state) }}</span></div>
-          <div class="detail-row"><span class="detail-label">反馈人</span><span>{{ detail.telId }}</span></div>
-          <div class="detail-row"><span class="detail-label">反馈信息</span><span class="pre-wrap">{{ detail.information }}</span></div>
-        </div>
-      </div>
-    </div>
+    <el-dialog v-model="detailVisible" title="反馈数据详情" width="600px">
+      <el-descriptions :column="2" border v-if="detail">
+        <el-descriptions-item label="反馈编号">{{ detail.afId }}</el-descriptions-item>
+        <el-descriptions-item label="反馈人手机号">{{ detail.telId }}</el-descriptions-item>
+        <el-descriptions-item label="网格区域" :span="2">
+          {{ detail.provinceName }} · {{ detail.cityName }}
+        </el-descriptions-item>
+        <el-descriptions-item label="具体地址" :span="2">{{ detail.address }}</el-descriptions-item>
+        <el-descriptions-item label="预估AQI等级">
+          <GradeTag :grade="detail.estimatedGrade" />
+        </el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <StateTag :state="detail.state" />
+        </el-descriptions-item>
+        <el-descriptions-item label="反馈时间">{{ detail.afDate }} {{ detail.afTime }}</el-descriptions-item>
+        <el-descriptions-item label="指派网格员">
+          {{ detail.gridName ? detail.gridName + '（' + detail.gridCode + '）' : '未指派' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="空气质量描述" :span="2">
+          <span class="pre-wrap">{{ detail.information }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item v-if="detail.remarks" label="备注" :span="2">{{ detail.remarks }}</el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button v-if="detail && (detail.state === 0 || detail.state === 2)" type="primary"
+          class="nep-btn-gradient" @click="detailVisible = false; openAssign(detail)">指派网格员</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 指派弹窗 -->
-    <div v-if="assigning" class="dialog-mask" @click.self="assigning = false">
-      <div class="dialog">
-        <div class="dialog-header">
-          <h3>指派网格员</h3>
-          <button class="dialog-close" @click="assigning = false">✕</button>
+    <el-dialog v-model="assignVisible" title="指派网格员" width="640px"
+      :close-on-click-modal="false">
+      <template v-if="assignItem">
+        <div class="assign-target">
+          <i class="fa-solid fa-location-dot"></i>
+          <b>{{ assignItem.provinceName }} · {{ assignItem.cityName }}</b>
+          <span class="assign-addr">{{ assignItem.address }}</span>
         </div>
-        <div class="dialog-body">
-          <p class="assign-target">
-            反馈编号 <b>#{{ assignItem.afId }}</b>　网格区域：<b>{{ assignItem.provinceName }} · {{ assignItem.cityName }}</b>
-          </p>
-          <p class="assign-mode">
-            {{ localWorkers.length ? '该网格区域有可工作网格员，以下为本地指派名单：' : '该网格区域暂无可工作网格员，以下为就近异地指派名单：' }}
-          </p>
-          <div class="worker-list">
-            <label
-              v-for="w in orderedWorkers"
-              :key="w.gridCode"
-              class="worker-item"
-              :class="{ disabled: !w.working }"
-            >
-              <input
-                type="radio"
-                name="worker"
-                :value="w.gridCode"
-                v-model="chosenWorker"
-                :disabled="!w.working"
-              >
-              <span class="worker-name">{{ w.realName }}</span>
+
+        <!-- 指派规则：只允许本地指派（省+市一致）；名单未就绪时不提前给出结论 -->
+        <el-alert v-if="workersLoading" title="正在加载网格员名单…" type="info" :closable="false"
+          style="margin-bottom: 14px" />
+        <el-alert v-else-if="localWorkers.length" :title="assignModeText" type="success" :closable="false"
+          style="margin-bottom: 14px" />
+        <el-alert v-else title="该网格区域没有可工作的本地网格员，不允许异地指派，请发起增员请求" type="warning"
+          :closable="false" style="margin-bottom: 14px" />
+
+        <!-- 仅列出本地（本网格区域）可工作的网格员，异地网格员不作为可选项 -->
+        <div v-if="!workersLoading && localWorkers.length" class="worker-list">
+          <label v-for="w in localWorkers" :key="w.gridCode" class="worker-item"
+            :class="{ selected: chosenWorker === w.gridCode, local: w.region === assignRegion }">
+            <input v-model="chosenWorker" type="radio" :value="w.gridCode" class="worker-radio">
+            <div class="worker-avatar">{{ w.realName ? w.realName.charAt(0) : '?' }}</div>
+            <div class="worker-meta">
+              <span class="worker-name">{{ w.realName }} <code>{{ w.gridCode }}</code></span>
               <span class="worker-region">{{ w.region }}</span>
-              <span class="worker-tag" :class="w.working ? 'on' : 'off'">{{ w.working ? '工作中' : '非工作' }}</span>
-            </label>
-          </div>
-          <div class="form-actions">
-            <button class="btn btn-default" @click="assigning = false">取 消</button>
-            <button class="btn btn-primary" :disabled="!chosenWorker || assigning2" @click="confirmAssign">
-              {{ assigning2 ? '指派中...' : '确认指派' }}
-            </button>
-          </div>
+            </div>
+            <span class="local-tag">本地</span>
+          </label>
         </div>
-      </div>
-    </div>
+      </template>
+      <template #footer>
+        <el-button @click="assignVisible = false">取消</el-button>
+        <!-- 无本地可工作网格员时，确认指派保持禁用 -->
+        <el-button type="primary" class="nep-btn-gradient" :disabled="!localWorkers.length || !chosenWorker"
+          :loading="assigning2" @click="confirmAssign">
+          <i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>确认指派
+        </el-button>
+        <!-- 本地无人可派：改为主推“申请增员”，交由管理员/决策者跟进 -->
+        <el-button v-if="!workersLoading && !localWorkers.length" type="primary" class="nep-btn-gradient"
+          :loading="applyingDemand" @click="applyDemand">
+          <i class="fa-solid fa-user-plus" style="margin-right:6px"></i>申请增员
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script>
+import { Refresh } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import GradeTag from '../../components/GradeTag.vue'
+import StateTag from '../../components/StateTag.vue'
 import { getAqiFeedbackList, deleteByAfid } from '../../api/aqiFeedback'
 import { assignTask, getGridWorkers } from '../../api/task'
-import { AQI_GRADES, FEEDBACK_STATES, gradeText, stateText } from '../../constants/aqi'
+import { applyGridDemand } from '../../api/gridDemand'
+import { AQI_GRADES, FEEDBACK_STATES } from '../../constants/aqi'
 
 export default {
   name: 'FeedbackManageView',
+  components: { GradeTag, StateTag },
   data() {
     return {
+      Refresh,
       list: [],
       loading: true,
       filters: {
@@ -171,20 +194,35 @@ export default {
         dateFrom: '',
         dateTo: ''
       },
-      applied: null, // 点击"查询"后生效的条件
+      applied: null, // 点击“查询”后生效的条件
+      dateRange: null,
+      page: { current: 1, size: 10 },
       detail: null,
-      assigning: false,
+      detailVisible: false,
+      assignVisible: false,
       assigning2: false,
+      applyingDemand: false, // 增员请求提交中
       assignItem: null,
       workers: [],
+      workersLoading: false, // 网格员名单加载中（避免误报“本地无人”）
       chosenWorker: '',
       gradeOptions: AQI_GRADES,
-      stateOptions: FEEDBACK_STATES,
-      toast: { show: false, type: 'success', message: '' },
-      toastTimer: null
+      stateOptions: FEEDBACK_STATES
     }
   },
   computed: {
+    assignRegion() {
+      return this.assignItem
+        ? (this.assignItem.provinceName || '') + '-' + (this.assignItem.cityName || '')
+        : ''
+    },
+    localWorkers() {
+      return this.workers.filter(w => w.region === this.assignRegion && w.working)
+    },
+    assignModeText() {
+      // 仅本地指派：可选项只有本网格区域可工作的网格员
+      return '本地指派：当前网格区域有 ' + this.localWorkers.length + ' 名可工作的网格员，请选择一名指派'
+    },
     filteredList() {
       const f = this.applied || { keyword: '', grade: '', state: '', dateFrom: '', dateTo: '' }
       return this.list.filter(item => {
@@ -200,20 +238,9 @@ export default {
         return true
       })
     },
-    localWorkers() {
-      if (!this.assignItem) return []
-      const region = (this.assignItem.provinceName || '') + '-' + (this.assignItem.cityName || '')
-      return this.workers.filter(w => w.region === region && w.working)
-    },
-    orderedWorkers() {
-      // 本地指派优先，异地（其它区域）按就近原则排后
-      const region = this.assignItem ? (this.assignItem.provinceName || '') + '-' + (this.assignItem.cityName || '') : ''
-      return [...this.workers].sort((a, b) => {
-        const localA = a.region === region ? 0 : 1
-        const localB = b.region === region ? 0 : 1
-        if (localA !== localB) return localA - localB
-        return (b.working ? 1 : 0) - (a.working ? 1 : 0)
-      })
+    pagedList() {
+      const start = (this.page.current - 1) * this.page.size
+      return this.filteredList.slice(start, start + this.page.size)
     }
   },
   created() {
@@ -221,12 +248,9 @@ export default {
     this.loadWorkers()
   },
   methods: {
-    gradeText,
-    stateText,
-    showToast(type, message) {
-      this.toast = { show: true, type, message }
-      if (this.toastTimer) clearTimeout(this.toastTimer)
-      this.toastTimer = setTimeout(() => { this.toast.show = false }, 2500)
+    maskTel(tel) {
+      if (!tel || tel.length < 7) return tel
+      return tel.slice(0, 3) + '****' + tel.slice(-4)
     },
     async fetchList() {
       this.loading = true
@@ -235,33 +259,49 @@ export default {
         if (res.data.code === 200) {
           this.list = res.data.data || []
         } else {
-          this.showToast('error', '获取列表失败：' + res.data.msg || res.data.message)
+          ElMessage.error('获取列表失败：' + (res.data.message || ''))
         }
       } catch (err) {
         console.error(err)
-        this.showToast('error', '网络异常，请确认后端服务已启动')
+        ElMessage.error('网络异常，请确认后端服务已启动')
       } finally {
         this.loading = false
       }
     },
     async loadWorkers() {
-      const res = await getGridWorkers()
-      this.workers = res.list
+      this.workersLoading = true
+      try {
+        const res = await getGridWorkers()
+        this.workers = res.list
+      } catch (err) {
+        console.error(err)
+        ElMessage.error('获取网格员名单失败，请稍后重试')
+      } finally {
+        this.workersLoading = false
+      }
     },
     applyFilter() {
-      this.applied = { ...this.filters }
+      this.applied = {
+        ...this.filters,
+        dateFrom: this.dateRange && this.dateRange[0] ? this.dateRange[0] : '',
+        dateTo: this.dateRange && this.dateRange[1] ? this.dateRange[1] : ''
+      }
+      this.page.current = 1
     },
     resetFilter() {
       this.filters = { keyword: '', grade: '', state: '', dateFrom: '', dateTo: '' }
+      this.dateRange = null
       this.applied = null
+      this.page.current = 1
     },
     showDetail(item) {
       this.detail = item
+      this.detailVisible = true
     },
     async openAssign(item) {
       this.assignItem = item
       this.chosenWorker = ''
-      this.assigning = true
+      this.assignVisible = true
       if (!this.workers.length) {
         await this.loadWorkers()
       }
@@ -271,286 +311,108 @@ export default {
       this.assigning2 = true
       try {
         const res = await assignTask(this.assignItem.afId, this.chosenWorker, this.assignItem)
-        const worker = this.workers.find(w => w.gridCode === this.chosenWorker)
-        const isLocal = worker && worker.region === (this.assignItem.provinceName || '') + '-' + (this.assignItem.cityName || '')
-        // 本地更新列表状态（后端就绪后由列表刷新获得）
-        this.assignItem.state = 1
-        this.showToast('success', (isLocal ? '本地指派' : '异地指派') + '成功，已通知网格员' + (res.mock ? '（演示数据）' : ''))
-        this.assigning = false
+        // 可选项只来自本地网格员，故此处必为本地指派
+        ElMessage.success('本地指派成功，已通知网格员' + (res.mock ? '（演示数据）' : ''))
+        this.assignVisible = false
+        // 从后端刷新列表，获取最新状态（后端未连接时保留本地状态变更）
+        this.fetchList()
       } catch (err) {
         console.error(err)
-        this.showToast('error', '指派失败，请重试')
+        ElMessage.error((err && err.message) || '指派失败，请重试')
       } finally {
         this.assigning2 = false
       }
     },
-    async handleDelete(item) {
-      if (!confirm('确定要删除这条反馈吗？此操作不可恢复。')) return
+    // 该区域无可工作的本地网格员、又不允许异地指派时，发起增员请求
+    async applyDemand() {
+      if (!this.assignItem) return
+      this.applyingDemand = true
       try {
-        const res = await deleteByAfid(item.afId)
-        if (res.data.code === 200) {
-          this.showToast('success', '删除成功')
+        const res = await applyGridDemand({ afId: this.assignItem.afId })
+        const body = (res && res.data) || {}
+        if (body.code === 200) {
+          // 无论是“已提交”还是“该区域已有待处理请求”，均提示后端返回的消息
+          ElMessage.success(body.message || '增员请求已提交')
+          this.assignVisible = false
           this.fetchList()
         } else {
-          this.showToast('error', '删除失败')
+          ElMessage.error(body.message || '申请增员失败')
         }
       } catch (err) {
         console.error(err)
-        this.showToast('error', '删除请求出错')
+        ElMessage.error((err && err.message) || '申请增员失败')
+      } finally {
+        this.applyingDemand = false
       }
+    },
+    handleDelete(item) {
+      ElMessageBox.confirm('确定要删除这条反馈吗？此操作不可恢复。', '删除确认', {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      })
+        .then(async () => {
+          try {
+            const res = await deleteByAfid(item.afId)
+            if (res.data.code === 200) {
+              ElMessage.success('删除成功')
+              this.fetchList()
+            } else {
+              ElMessage.error('删除失败')
+            }
+          } catch (err) {
+            ElMessage.error('删除请求出错')
+          }
+        })
+        .catch(() => {})
     }
   }
 }
 </script>
 
 <style scoped>
-.page {
-  padding: 28px 32px;
-  text-align: left;
-}
-
-.card {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  overflow: hidden;
-}
-
-.card-header {
-  padding: 22px 28px;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.card-title {
-  margin: 0;
-  font-size: 19px;
-  color: #2c3e50;
-}
-
-.card-sub {
-  margin: 5px 0 0;
-  font-size: 13px;
-  color: #a8abb2;
-}
-
-/* 查询条件栏 */
+/* 查询条件条 */
 .filter-bar {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
-  padding: 16px 28px;
-  border-bottom: 1px solid #ebeef5;
-  background: #fafbfc;
+  flex-wrap: wrap;
+  padding: 16px 22px 4px;
 }
 
-.filter-input {
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
+.f-kw {
+  width: 280px;
+}
+
+.f-sm {
+  width: 150px;
+}
+
+.f-date {
+  width: 250px;
+}
+
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 12px 6px;
+}
+
+.region {
   font-size: 13px;
-  outline: none;
-  min-width: 130px;
-  background: #fff;
-  color: #303133;
-}
-
-.filter-input:focus {
-  border-color: #42b983;
-}
-
-.btn-filter {
-  height: 34px;
-  padding: 0 18px;
-  border: none;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #42b983, #2e8565);
-  color: #fff;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.btn-filter.reset {
-  background: #fff;
-  color: #606266;
-  border: 1px solid #dcdfe6;
-}
-
-/* 表格 */
-.table-wrap {
-  overflow-x: auto;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.data-table th,
-.data-table td {
-  padding: 13px 16px;
-  text-align: left;
-  border-bottom: 1px solid #ebeef5;
-}
-
-.data-table th {
-  background: #fafbfc;
-  color: #909399;
+  color: #334155;
   font-weight: 600;
-  font-size: 13px;
-  white-space: nowrap;
 }
 
-.data-table tbody tr:hover {
-  background: #f4faf7;
-}
-
-.cell-id {
-  color: #909399;
-  font-family: monospace;
-}
-
-.cell-nowrap {
-  white-space: nowrap;
-}
-
-.cell-ellipsis {
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.grade-tag {
-  display: inline-block;
-  padding: 3px 12px;
-  border-radius: 12px;
+.region-icon {
+  color: #10b981;
+  margin-right: 4px;
   font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
 }
 
-.grade-tag.grade-0 { background: #f4f4f5; color: #909399; }
-.grade-tag.grade-1 { background: #95e8a7; color: #1a6b32; }
-.grade-tag.grade-2 { background: #e1f3d8; color: #529b2e; }
-.grade-tag.grade-3 { background: #faecd8; color: #b88230; }
-.grade-tag.grade-4 { background: #fde2e2; color: #c45656; }
-.grade-tag.grade-5 { background: #f89898; color: #fff; }
-.grade-tag.grade-6 { background: #7b4a12; color: #fff; }
-
-.state-tag {
+.muted {
+  color: #94a3b8;
   font-size: 13px;
-  white-space: nowrap;
-}
-
-.state-tag.state-0 { color: #e6a23c; font-weight: 600; }
-.state-tag.state-1 { color: #409eff; }
-.state-tag.state-2 { color: #909399; }
-.state-tag.state-3 { color: #67c23a; font-weight: 600; }
-
-.action-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.btn-text {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 5px 12px;
-  font-size: 13px;
-  border-radius: 6px;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.btn-detail { color: #606266; background: #f4f4f5; }
-.btn-detail:hover { background: #e9e9eb; }
-
-.btn-assign { color: #fff; background: linear-gradient(135deg, #42b983, #2e8565); }
-.btn-assign:hover { opacity: 0.85; }
-
-.btn-danger { color: #f56c6c; background: #fef0f0; }
-.btn-danger:hover { background: #fde2e2; }
-
-.empty-cell {
-  text-align: center !important;
-  padding: 60px 0 !important;
-}
-
-.empty-cell > span {
-  display: block;
-  color: #c0c4cc;
-  font-size: 14px;
-}
-
-.empty-icon {
-  font-size: 34px;
-  margin-bottom: 8px;
-}
-
-/* 弹窗 */
-.dialog-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.dialog {
-  width: 560px;
-  max-width: 92%;
-  max-height: 86vh;
-  overflow-y: auto;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-}
-
-.dialog-header {
-  padding: 18px 22px;
-  border-bottom: 1px solid #ebeef5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: sticky;
-  top: 0;
-  background: #fff;
-}
-
-.dialog-header h3 {
-  margin: 0;
-  font-size: 16px;
-  color: #2c3e50;
-}
-
-.dialog-close {
-  background: none;
-  border: none;
-  font-size: 16px;
-  color: #909399;
-  cursor: pointer;
-}
-
-.dialog-body {
-  padding: 20px 22px;
-}
-
-.detail-row {
-  display: flex;
-  margin-bottom: 12px;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.detail-label {
-  width: 80px;
-  flex-shrink: 0;
-  color: #909399;
 }
 
 .pre-wrap {
@@ -558,144 +420,113 @@ export default {
   word-break: break-all;
 }
 
-/* 指派 */
+/* 指派弹窗 */
 .assign-target {
-  margin: 0 0 10px;
-  font-size: 14px;
-  color: #303133;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f0fdf5;
+  border: 1px solid #bbf7d0;
+  color: #047857;
+  border-radius: 10px;
+  padding: 11px 14px;
+  margin-bottom: 14px;
+  font-size: 13.5px;
+  flex-wrap: wrap;
 }
 
-.assign-mode {
-  margin: 0 0 12px;
-  font-size: 13px;
-  color: #e6a23c;
+.assign-addr {
+  color: #64748b;
+  font-weight: 400;
 }
 
 .worker-list {
+  max-height: 320px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 18px;
 }
 
 .worker-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  border: 1.5px solid var(--nep-border);
+  border-radius: 12px;
   padding: 11px 14px;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s;
-  font-size: 14px;
+  transition: all 0.18s;
 }
 
-.worker-item:hover {
-  border-color: #b7e4cf;
+.worker-item:hover:not(.disabled) {
+  border-color: #6ee7b7;
+}
+
+.worker-item.selected {
+  border-color: #10b981;
+  background: #f0fdf5;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
 }
 
 .worker-item.disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: not-allowed;
+  background: #fafafa;
+}
+
+.worker-radio {
+  accent-color: #10b981;
+  width: 16px;
+  height: 16px;
+}
+
+.worker-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+  color: #047857;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.worker-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
 }
 
 .worker-name {
+  font-size: 13.5px;
   font-weight: 600;
-  color: #303133;
+  color: #0f172a;
+}
+
+.worker-name code {
+  font-size: 11px;
+  color: #94a3b8;
+  background: #f1f5f9;
+  border-radius: 5px;
+  padding: 1px 6px;
+  margin-left: 6px;
 }
 
 .worker-region {
-  color: #909399;
-  font-size: 13px;
-}
-
-.worker-tag {
-  margin-left: auto;
   font-size: 12px;
-  padding: 2px 10px;
-  border-radius: 10px;
+  color: #94a3b8;
 }
 
-.worker-tag.on { background: #f0f9eb; color: #67c23a; }
-.worker-tag.off { background: #f4f4f5; color: #909399; }
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.btn {
-  padding: 9px 24px;
-  font-size: 14px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 500;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #42b983, #2e8565);
+.local-tag {
+  background: #10b981;
   color: #fff;
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-weight: 600;
 }
-
-.btn-default {
-  background: #fff;
-  color: #606266;
-  border: 1px solid #dcdfe6;
-}
-
-/* 加载态 */
-.loading-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80px 20px;
-  gap: 16px;
-}
-
-.spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid #e4e7ed;
-  border-top-color: #42b983;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.loading-text {
-  color: #909399;
-  font-size: 14px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Toast */
-.toast {
-  position: fixed;
-  top: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 22px;
-  border-radius: 8px;
-  font-size: 14px;
-  z-index: 9999;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-  white-space: nowrap;
-}
-
-.toast.success { background: #f0f9eb; color: #67c23a; border: 1px solid #e1f3d8; }
-.toast.error   { background: #fef0f0; color: #f56c6c; border: 1px solid #fde2e2; }
-.toast.warning { background: #fdf6ec; color: #e6a23c; border: 1px solid #faecd8; }
-
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, -20px); }
 </style>

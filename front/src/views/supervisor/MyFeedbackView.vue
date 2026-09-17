@@ -1,83 +1,121 @@
 <template>
-  <div class="page">
-    <transition name="toast">
-      <div v-if="toast.show" class="toast" :class="toast.type">
-        <span class="toast-msg">{{ toast.message }}</span>
-      </div>
-    </transition>
-
-    <div class="card">
-      <div class="card-header">
+  <div class="app-page">
+    <div class="app-card">
+      <div class="app-card-head">
         <div>
-          <h2 class="card-title">历史反馈信息</h2>
-          <p class="card-sub">仅显示您本人提交的反馈，按提交时间倒序</p>
+          <h2 class="app-card-title">
+            <span class="app-ico"><i class="fa-solid fa-clock-rotate-left"></i></span>
+            历史反馈
+          </h2>
+          <p class="app-card-sub">仅显示您本人提交的反馈，按提交时间倒序</p>
         </div>
-        <button class="btn btn-primary" @click="$router.push('/sf/submit')">+ 新增反馈</button>
+        <button class="app-btn-primary app-btn-sm" @click="$router.push('/sf/submit')">
+          <i class="fa-solid fa-plus"></i>新增反馈
+        </button>
       </div>
 
-      <div v-if="loading" class="loading-wrap">
-        <div class="spinner"></div>
-        <span class="loading-text">数据加载中...</span>
-      </div>
+      <div v-if="loading" class="loading-wrap" v-loading="loading" element-loading-text="数据加载中..."></div>
 
       <div v-else-if="list.length" class="feed-list">
-        <div
-          v-for="item in list"
-          :key="item.afId"
-          class="feed-item"
-          @click="showDetail(item)"
-        >
-          <div class="feed-main">
-            <span class="feed-title">📍 {{ item.provinceName || '省份' + item.provinceId }} · {{ item.cityName || '城市' + item.cityId }}</span>
-            <span class="feed-sub">{{ item.afDate }} {{ item.afTime }}　{{ item.address }}</span>
+        <div v-for="item in list" :key="item.afId" class="feed-card" @click="showDetail(item)">
+          <div class="feed-top">
+            <GradeTag :grade="item.estimatedGrade" />
+            <StateTag :state="item.state" />
           </div>
-          <div class="feed-right">
-            <span class="grade-tag" :class="'grade-' + item.estimatedGrade">{{ gradeText(item.estimatedGrade) }}</span>
-            <span class="state-text" :class="'state-' + item.state">{{ stateText(item.state) }}</span>
+          <div class="feed-loc">
+            <i class="fa-solid fa-location-dot"></i>
+            {{ item.provinceName || '省份' + item.provinceId }} · {{ item.cityName || '城市' + item.cityId }}
+          </div>
+          <div class="feed-addr">{{ item.address }}</div>
+          <div class="feed-foot">
+            <span><i class="fa-regular fa-calendar"></i> {{ item.afDate }} {{ item.afTime }}</span>
+            <span v-if="item.aqiGrade != null" class="feed-measured">
+              实测结果 · <b>{{ gradeShort(item.aqiGrade) }}</b>
+            </span>
+            <span v-else class="feed-waiting">等待实测</span>
+            <i class="fa-solid fa-angle-right feed-arrow"></i>
           </div>
         </div>
       </div>
 
-      <div v-else class="empty-wrap">
-        <span class="empty-icon">📭</span>
-        <span>暂无反馈记录</span>
+      <div v-else class="app-empty">
+        <span class="app-empty-icon"><i class="fa-regular fa-folder-open"></i></span>
+        <p>暂无反馈记录</p>
+        <button class="app-btn-primary app-btn-sm" @click="$router.push('/sf/submit')">去提交第一条反馈</button>
       </div>
     </div>
 
     <!-- 详情弹窗 -->
-    <div v-if="detail" class="dialog-mask" @click.self="detail = null">
-      <div class="dialog">
-        <div class="dialog-header">
-          <h3>反馈详情</h3>
-          <button class="dialog-close" @click="detail = null">✕</button>
+    <el-dialog v-model="dialogVisible" class="app-dialog" width="440px" title="反馈详情">
+      <div v-if="detail" class="detail-list">
+        <div class="detail-item">
+          <span class="detail-label">反馈编号</span>
+          <span class="detail-value">{{ detail.afId }}</span>
         </div>
-        <div class="dialog-body">
-          <div class="detail-row"><span class="detail-label">反馈编号</span><span>{{ detail.afId }}</span></div>
-          <div class="detail-row"><span class="detail-label">网格区域</span><span>{{ detail.provinceName || detail.provinceId }} · {{ detail.cityName || detail.cityId }}</span></div>
-          <div class="detail-row"><span class="detail-label">具体地址</span><span>{{ detail.address }}</span></div>
-          <div class="detail-row"><span class="detail-label">提交时间</span><span>{{ detail.afDate }} {{ detail.afTime }}</span></div>
-          <div class="detail-row"><span class="detail-label">预估等级</span><span>{{ gradeText(detail.estimatedGrade) }}</span></div>
-          <div class="detail-row"><span class="detail-label">当前状态</span><span>{{ stateText(detail.state) }}</span></div>
-          <div class="detail-row"><span class="detail-label">反馈信息</span><span class="pre-wrap">{{ detail.information }}</span></div>
+        <div class="detail-item">
+          <span class="detail-label">网格区域</span>
+          <span class="detail-value">{{ detail.provinceName || detail.provinceId }} · {{ detail.cityName || detail.cityId }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">具体地址</span>
+          <span class="detail-value">{{ detail.address }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">提交时间</span>
+          <span class="detail-value">{{ detail.afDate }} {{ detail.afTime }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">预估等级</span>
+          <span class="detail-value"><GradeTag :grade="detail.estimatedGrade" /></span>
+        </div>
+        <div class="detail-item" v-if="detail.aqiGrade != null">
+          <span class="detail-label">实测等级</span>
+          <span class="detail-value"><GradeTag :grade="detail.aqiGrade" /></span>
+        </div>
+        <div class="detail-item" v-if="detail.aqiGrade != null">
+          <span class="detail-label">实测明细</span>
+          <span class="detail-value">SO₂ {{ detail.so2Grade }}级 · CO {{ detail.coGrade }}级 · PM2.5 {{ detail.pm25Grade }}级</span>
+        </div>
+        <div class="detail-item" v-if="detail.aqiGrade != null">
+          <span class="detail-label">实测网格员</span>
+          <span class="detail-value">{{ detail.gridName || detail.gridCode }}</span>
+        </div>
+        <div class="detail-item" v-if="detail.aqiGrade != null">
+          <span class="detail-label">实测时间</span>
+          <span class="detail-value">{{ detail.measureDate }} {{ detail.measureTime }}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">当前状态</span>
+          <span class="detail-value"><StateTag :state="detail.state" /></span>
+        </div>
+        <div class="detail-item detail-info">
+          <span class="detail-label">反馈信息</span>
+          <pre class="detail-value pre-wrap">{{ detail.information }}</pre>
         </div>
       </div>
-    </div>
+      <template #footer>
+        <el-button @click="dialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script>
+import { ElMessage } from 'element-plus'
+import GradeTag from '../../components/GradeTag.vue'
+import StateTag from '../../components/StateTag.vue'
 import { getAqiFeedbackList } from '../../api/aqiFeedback'
-import { gradeText, stateText } from '../../constants/aqi'
+import { gradeShort } from '../../constants/aqi'
 
 export default {
   name: 'MyFeedbackView',
+  components: { GradeTag, StateTag },
   data() {
     return {
       list: [],
       loading: true,
       detail: null,
-      toast: { show: false, type: 'success', message: '' },
-      toastTimer: null
+      dialogVisible: false
     }
   },
   computed: {
@@ -89,13 +127,7 @@ export default {
     this.fetchList()
   },
   methods: {
-    gradeText,
-    stateText,
-    showToast(type, message) {
-      this.toast = { show: true, type, message }
-      if (this.toastTimer) clearTimeout(this.toastTimer)
-      this.toastTimer = setTimeout(() => { this.toast.show = false }, 2500)
-    },
+    gradeShort,
     async fetchList() {
       this.loading = true
       try {
@@ -107,249 +139,144 @@ export default {
             .filter(f => f.telId === this.myAccount)
             .sort((a, b) => (b.afDate + (b.afTime || '')).localeCompare(a.afDate + (a.afTime || '')))
         } else {
-          this.showToast('error', '获取列表失败：' + res.data.msg || res.data.message)
+          ElMessage.error('获取列表失败')
         }
       } catch (err) {
         console.error(err)
-        this.showToast('error', '网络异常，请确认后端服务已启动')
+        ElMessage.error('网络异常，请确认后端服务已启动')
       } finally {
         this.loading = false
       }
     },
     showDetail(item) {
       this.detail = item
+      this.dialogVisible = true
     }
   }
 }
 </script>
 
 <style scoped>
-.page {
-  padding: 28px 32px;
-  text-align: left;
+.loading-wrap {
+  min-height: 260px;
 }
 
-.card {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  overflow: hidden;
-}
-
-.card-header {
-  padding: 22px 28px;
-  border-bottom: 1px solid #ebeef5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.card-title {
-  margin: 0;
-  font-size: 19px;
-  color: #2c3e50;
-}
-
-.card-sub {
-  margin: 5px 0 0;
-  font-size: 13px;
-  color: #a8abb2;
-}
-
-.btn {
-  padding: 9px 20px;
-  font-size: 14px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 500;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #42b983, #2e8565);
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(66, 185, 131, 0.3);
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(66, 185, 131, 0.4);
-}
-
-/* 反馈列表 */
 .feed-list {
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
 }
 
-.feed-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 14px 16px;
-  border-radius: 10px;
-  background: #fafbfc;
+@media (max-width: 768px) {
+  .feed-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.feed-card {
+  background: #fff;
+  border: 1px solid var(--app-ring);
+  border-radius: 18px;
+  padding: 16px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.feed-item:hover {
-  background: #f0f9f4;
-  transform: translateX(2px);
+.feed-card:hover {
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 8px 22px rgba(4, 120, 87, 0.10);
+  transform: translateY(-1px);
 }
 
-.feed-main {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.feed-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.feed-sub {
-  font-size: 12px;
-  color: #a8abb2;
-}
-
-.feed-right {
+.feed-top {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
-.grade-tag {
-  padding: 3px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.grade-tag.grade-0 { background: #f4f4f5; color: #909399; }
-.grade-tag.grade-1 { background: #95e8a7; color: #1a6b32; }
-.grade-tag.grade-2 { background: #e1f3d8; color: #529b2e; }
-.grade-tag.grade-3 { background: #faecd8; color: #b88230; }
-.grade-tag.grade-4 { background: #fde2e2; color: #c45656; }
-.grade-tag.grade-5 { background: #f89898; color: #fff; }
-.grade-tag.grade-6 { background: #7b4a12; color: #fff; }
-
-.state-text {
-  font-size: 12px;
-  color: #909399;
-}
-
-.state-text.state-0 { color: #e6a23c; }
-.state-text.state-3 { color: #67c23a; font-weight: 600; }
-
-/* 空状态 */
-.empty-wrap {
-  padding: 80px 20px;
+.feed-loc {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.feed-loc i {
+  color: var(--app-strong);
+  font-size: 13px;
+}
+
+.feed-addr {
+  margin: 4px 0 0 19px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.feed-foot {
+  display: flex;
   align-items: center;
   gap: 10px;
-  color: #c0c4cc;
-  font-size: 14px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #94a3b8;
+  flex-wrap: wrap;
 }
 
-.empty-icon {
-  font-size: 40px;
+.feed-foot i {
+  margin-right: 3px;
 }
 
-/* 加载态 */
-.loading-wrap {
+.feed-measured {
+  color: var(--app-strong);
+  font-weight: 600;
+}
+
+.feed-waiting {
+  color: #b45309;
+  background: #fffbeb;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.feed-arrow {
+  margin-left: auto;
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+/* 详情 */
+.detail-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 80px 20px;
-  gap: 16px;
+  gap: 12px;
 }
 
-.spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid #e4e7ed;
-  border-top-color: #42b983;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.loading-text {
-  color: #909399;
-  font-size: 14px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* 弹窗 */
-.dialog-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+.detail-item {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.dialog {
-  width: 520px;
-  max-width: 92%;
-  background: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-}
-
-.dialog-header {
-  padding: 18px 22px;
-  border-bottom: 1px solid #ebeef5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.dialog-header h3 {
-  margin: 0;
-  font-size: 16px;
-  color: #2c3e50;
-}
-
-.dialog-close {
-  background: none;
-  border: none;
-  font-size: 16px;
-  color: #909399;
-  cursor: pointer;
-}
-
-.dialog-body {
-  padding: 20px 22px;
-}
-
-.detail-row {
-  display: flex;
-  margin-bottom: 12px;
-  font-size: 14px;
-  line-height: 1.6;
+  gap: 12px;
+  font-size: 13.5px;
 }
 
 .detail-label {
-  width: 80px;
+  width: 76px;
   flex-shrink: 0;
-  color: #909399;
+  color: #94a3b8;
+}
+
+.detail-value {
+  flex: 1;
+  color: #334155;
+}
+
+.detail-info .detail-value {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13.5px;
 }
 
 .pre-wrap {

@@ -53,6 +53,12 @@ const routes = [
     component: () => import('../views/gridworker/TaskMeasureView.vue'),
     meta: { roles: ['grid'] }
   },
+  {
+    path: '/gw/leave',
+    name: 'gwLeave',
+    component: () => import('../views/gridworker/LeaveView.vue'),
+    meta: { roles: ['grid'] }
+  },
   // ---------- NEPM 系统管理端 ----------
   {
     path: '/admin/feedback',
@@ -70,6 +76,19 @@ const routes = [
     path: '/admin/stats',
     name: 'adminStats',
     component: () => import('../views/admin/StatsView.vue'),
+    meta: { roles: ['admin'] }
+  },
+  // ---------- 人员管理（HR）----------
+  {
+    path: '/admin/hr/grid',
+    name: 'hrGrid',
+    component: () => import('../views/admin/HrGridView.vue'),
+    meta: { roles: ['admin'] }
+  },
+  {
+    path: '/admin/hr/supervisor',
+    name: 'hrSupervisor',
+    component: () => import('../views/admin/HrSupervisorView.vue'),
     meta: { roles: ['admin'] }
   },
   {
